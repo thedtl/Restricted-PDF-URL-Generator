@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Link Tool</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        /* --- Base Styles --- */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f6f8;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            color: #333;
+        }
+
+        .card {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            width: 100%;
+            max-width: 700px;
+            text-align: center;
+        }
+
+        h1 { margin-top: 0; font-size: 24px; color: #111; }
+        p { color: #666; margin-bottom: 25px; }
+
+        /* --- Inputs & Main Button --- */
+        input, textarea {
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            border: 2px solid #e1e1e1;
+            border-radius: 8px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+            outline: none;
+            margin-bottom: 15px;
+            font-family: 'Inter', sans-serif;
+        }
+        input:focus, textarea:focus { border-color: #0061fe; }
+        
+        textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .input-hint {
+            font-size: 12px;
+            color: #888;
+            text-align: left;
+            margin-top: -10px;
+            margin-bottom: 15px;
+        }
+        
+        .input-error {
+            font-size: 12px;
+            color: #dc3545;
+            text-align: left;
+            margin-top: -10px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .button-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .generate-btn {
+            flex: 1;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            background: #0061fe;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            transition: background 0.2s, transform 0.1s;
+        }
+        .generate-btn:hover { background: #004bb5; }
+        .generate-btn:active { transform: scale(0.98); }
+
+        .clear-btn {
+            padding: 14px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            background: #f8f9fa;
+            color: #666;
+            border: 2px solid #e1e1e1;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .clear-btn:hover { 
+            background: #e9ecef; 
+            border-color: #ccc;
+        }
+
+        /* --- Results Section --- */
+        #results {
+            margin-top: 30px;
+            text-align: left;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+            animation: fadeIn 0.5s ease;
+        }
+
+        label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #888;
+            font-weight: 600;
+            margin-top: 20px;
+            display: block;
+            margin-bottom: 8px;
+        }
+        
+        label:first-of-type {
+            margin-top: 0;
+        }
+
+        .result-wrapper {
+            position: relative;
+        }
+
+        .code-box {
+            background: #f8f9fa;
+            padding: 15px;
+            padding-right: 80px;
+            border: 1px solid #e1e1e1;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            color: #444;
+            word-break: break-all;
+            min-height: 20px;
+            max-height: 150px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .button-group {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            display: flex;
+            gap: 5px;
+        }
+
+        .copy-btn, .test-btn {
+            background: white;
+            border: 1px solid #ccc;
+            color: #333;
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .copy-btn:hover, .test-btn:hover {
+            background: #eee;
+        }
+        .test-btn {
+            background: #e7f3ff;
+            border-color: #0061fe;
+            color: #0061fe;
+        }
+        .test-btn:hover {
+            background: #d0e8ff;
+        }
+
+        .section-divider {
+            margin: 25px 0;
+            border-top: 2px dashed #ddd;
+            position: relative;
+        }
+        .section-divider span {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 0 12px;
+            font-size: 11px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h1>LibGuide PDF Generator (20% Limit)</h1>
+        <p>Paste your Dropbox link below to generate the viewer code.</p>
+
+        <input type="text" id="dropboxLink" placeholder="https://www.dropbox.com/..." autofocus>
+        <div class="input-error" id="linkError">Please enter a valid Dropbox link.</div>
+        
+        <textarea id="citation" placeholder="Author, Name. Book Title. Place: Publisher, Year."></textarea>
+        <div class="input-hint">Optional: Add citation for accordion-style output (HTML like &lt;em&gt; allowed)</div>
+        
+        <div class="button-row">
+            <button class="generate-btn" onclick="generateLink()">Generate Code</button>
+            <button class="clear-btn" onclick="clearForm()">Clear</button>
+        </div>
+
+        <div id="results" style="display:none;">
+            
+            <label>Master Link (Test this first)</label>
+            <div class="result-wrapper">
+                <div class="code-box" id="finalLink"></div>
+                <div class="button-group">
+                    <button class="test-btn" onclick="testLink()">Test ↗</button>
+                    <button class="copy-btn" onclick="copyToClipboard('finalLink', this)">Copy</button>
+                </div>
+            </div>
+
+            <label>Standard Embed Code</label>
+            <div class="result-wrapper">
+                <div class="code-box" id="embedCode"></div>
+                <button class="copy-btn" onclick="copyToClipboard('embedCode', this)">Copy</button>
+            </div>
+
+            <div class="section-divider"><span>Accordion Style</span></div>
+
+            <label>Accordion Code (Self-contained)</label>
+            <div class="result-wrapper">
+                <div class="code-box" id="accordionCode"></div>
+                <button class="copy-btn" onclick="copyToClipboard('accordionCode', this)">Copy</button>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- YOUR SETTINGS ---
+        const VIEWER_URL = "https://crawby.github.io/pdf-reader/web/viewer.html";
+        const WORKER_URL = "https://dropbox-guard.ccrawford.workers.dev/";
+        // ---------------------
+
+        // Store the last generated URL for the test button
+        let lastGeneratedUrl = "";
+
+        function generateLink() {
+            const input = document.getElementById('dropboxLink').value.trim();
+            const citation = document.getElementById('citation').value.trim() || 'Author, Name. <em>Book Title</em>. Year.';
+            const errorEl = document.getElementById('linkError');
+            
+            // Reset error state
+            errorEl.style.display = 'none';
+
+            if (!input) { 
+                errorEl.textContent = "Please paste a link first!";
+                errorEl.style.display = 'block';
+                return; 
+            }
+
+            // Validate it's a Dropbox link
+            if (!input.includes('dropbox.com/')) {
+                errorEl.textContent = "This doesn't look like a Dropbox link.";
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            let base64Link;
+            try { 
+                // Properly encode UTF-8 characters before base64
+                base64Link = btoa(encodeURIComponent(input).replace(/%([0-9A-F]{2})/g,
+                    function toSolidBytes(match, p1) {
+                        return String.fromCharCode('0x' + p1);
+                }));
+            } catch (e) { 
+                errorEl.textContent = "Error: Could not encode link.";
+                errorEl.style.display = 'block';
+                return; 
+            }
+
+            // Build the worker URL with the encoded file parameter
+            const workerWithFile = `${WORKER_URL}?file=${base64Link}`;
+            
+            // IMPORTANT: URL-encode the entire worker URL to avoid nested query string issues
+            const finalUrl = `${VIEWER_URL}?file=${encodeURIComponent(workerWithFile)}`;
+            
+            // Store for test button
+            lastGeneratedUrl = finalUrl;
+
+            // Create the standard HTML embed code
+            const embedHtml = `<!-- Mobile Friendly Link -->
+<div style="text-align: right; margin-bottom: 8px;">
+    <a href="${finalUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: #333; font-family: sans-serif; font-size: 0.9em; border: 1px solid #ccc; padding: 5px 10px; border-radius: 4px; background-color: #f9f9f9;">
+        <span style="font-size: 1.1em; margin-right: 4px;">&#x2197;</span> Open Preview (20%)
+    </a>
+</div>
+<!-- The PDF Reader -->
+<iframe src="${finalUrl}" width="100%" height="900" style="border: 1px solid #ccc; border-radius: 4px;" referrerpolicy="origin" allowfullscreen webkitallowfullscreen mozallowfullscreen></iframe>`;
+
+            // Create the self-contained Accordion Code
+            const accordionCode = `<style>
+.book-accordion { margin-bottom: 12px; border: 1px solid #ccc; border-radius: 6px; overflow: hidden; }
+.book-header { background-color: #f9f9f9; padding: 12px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-family: sans-serif; transition: background-color 0.2s; }
+.book-header:hover { background-color: #f0f0f0; }
+.book-header .citation { flex: 1; }
+.book-header .toggle-text { font-size: 0.85em; color: #666; margin-left: 12px; padding: 4px 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; white-space: nowrap; }
+.book-header:hover .toggle-text { background: #eee; }
+.book-content { max-height: 0; overflow: hidden; transition: max-height 0.4s ease-out; }
+.book-accordion.open .book-content { max-height: 1000px; }
+.book-content-inner { padding: 12px; background: #fff; }
+.fullscreen-link { text-align: right; margin-bottom: 8px; }
+.fullscreen-link a { text-decoration: none; color: #333; font-family: sans-serif; font-size: 0.9em; border: 1px solid #ccc; padding: 5px 10px; border-radius: 4px; background-color: #f9f9f9; }
+.fullscreen-link a:hover { background-color: #eee; }
+</style>
+
+<div class="book-accordion">
+    <div class="book-header" tabindex="0" onclick="(function(el){var a=el.parentElement,t=el.querySelector('.toggle-text');a.classList.toggle('open');t.textContent=a.classList.contains('open')?'Collapse':'Preview';})(this)" onkeydown="if(event.key==='Enter'){this.click()}">
+        <div class="citation">${citation}</div>
+        <span class="toggle-text">Preview</span>
+    </div>
+    <div class="book-content">
+        <div class="book-content-inner">
+            <div class="fullscreen-link">
+                <a href="${finalUrl}" target="_blank" rel="noopener noreferrer">
+                    <span style="margin-right: 4px;">↗</span> Open Preview (20%)
+                </a>
+            </div>
+            <iframe src="${finalUrl}" width="100%" height="700" style="border: 1px solid #ccc; border-radius: 4px;" referrerpolicy="origin" allowfullscreen></iframe>
+        </div>
+    </div>
+</div>`;
+
+            // Show Results
+            document.getElementById('finalLink').textContent = finalUrl;
+            document.getElementById('embedCode').textContent = embedHtml;
+            document.getElementById('accordionCode').textContent = accordionCode;
+            document.getElementById('results').style.display = 'block';
+        }
+
+        // --- Test Link Function ---
+        function testLink() {
+            if (lastGeneratedUrl) {
+                window.open(lastGeneratedUrl, '_blank', 'noopener,noreferrer');
+            }
+        }
+
+        // --- Clear Form Function ---
+        function clearForm() {
+            document.getElementById('dropboxLink').value = '';
+            document.getElementById('citation').value = '';
+            document.getElementById('linkError').style.display = 'none';
+            document.getElementById('results').style.display = 'none';
+            lastGeneratedUrl = '';
+            document.getElementById('dropboxLink').focus();
+        }
+
+        // --- Copy Functionality ---
+        function copyToClipboard(elementId, btnElement) {
+            const textToCopy = document.getElementById(elementId).textContent;
+            
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                const originalText = btnElement.textContent;
+                btnElement.textContent = "Copied!";
+                btnElement.style.background = "#d1e7dd";
+                btnElement.style.borderColor = "#badbcc";
+                btnElement.style.color = "#0f5132";
+
+                setTimeout(() => {
+                    btnElement.textContent = originalText;
+                    btnElement.style.background = "white";
+                    btnElement.style.borderColor = "#ccc";
+                    btnElement.style.color = "#333";
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });
+        }
+
+        // --- Enter key to generate ---
+        document.getElementById('dropboxLink').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                generateLink();
+            }
+        });
+    </script>
+
+</body>
+</html>
