@@ -150,15 +150,10 @@
             white-space: pre-wrap;
         }
 
-        .button-group {
+        .copy-btn {
             position: absolute;
             top: 5px;
             right: 5px;
-            display: flex;
-            gap: 5px;
-        }
-
-        .copy-btn, .test-btn {
             background: white;
             border: 1px solid #ccc;
             color: #333;
@@ -169,16 +164,8 @@
             font-weight: 600;
             transition: all 0.2s;
         }
-        .copy-btn:hover, .test-btn:hover {
+        .copy-btn:hover {
             background: #eee;
-        }
-        .test-btn {
-            background: #e7f3ff;
-            border-color: #0061fe;
-            color: #0061fe;
-        }
-        .test-btn:hover {
-            background: #d0e8ff;
         }
 
         .section-divider {
@@ -224,13 +211,10 @@
 
         <div id="results" style="display:none;">
             
-            <label>Master Link (Test this first)</label>
+            <label>Master Link</label>
             <div class="result-wrapper">
                 <div class="code-box" id="finalLink"></div>
-                <div class="button-group">
-                    <button class="test-btn" onclick="testLink()">Test ↗</button>
-                    <button class="copy-btn" onclick="copyToClipboard('finalLink', this)">Copy</button>
-                </div>
+                <button class="copy-btn" onclick="copyToClipboard('finalLink', this)">Copy</button>
             </div>
 
             <label>Standard Embed Code</label>
@@ -251,13 +235,10 @@
     </div>
 
     <script>
-        // --- YOUR SETTINGS ---
-        const VIEWER_URL = "https://crawby.github.io/pdf-reader/web/viewer.html";
-        const WORKER_URL = "https://dropbox-guard.ccrawford.workers.dev/";
+        // --- YOUR SETTINGS (RESTRICTED 20% VERSION) ---
+        const VIEWER_URL = "https://thedtl.github.io/restricted-pdf-reader/web/viewer.html";
+        const WORKER_URL = "https://restricteddropboxguard.ccrawford.workers.dev/";
         // ---------------------
-
-        // Store the last generated URL for the test button
-        let lastGeneratedUrl = "";
 
         function generateLink() {
             const input = document.getElementById('dropboxLink').value.trim();
@@ -298,9 +279,6 @@
             
             // IMPORTANT: URL-encode the entire worker URL to avoid nested query string issues
             const finalUrl = `${VIEWER_URL}?file=${encodeURIComponent(workerWithFile)}`;
-            
-            // Store for test button
-            lastGeneratedUrl = finalUrl;
 
             // Create the standard HTML embed code
             const embedHtml = `<!-- Mobile Friendly Link -->
@@ -352,20 +330,12 @@
             document.getElementById('results').style.display = 'block';
         }
 
-        // --- Test Link Function ---
-        function testLink() {
-            if (lastGeneratedUrl) {
-                window.open(lastGeneratedUrl, '_blank', 'noopener,noreferrer');
-            }
-        }
-
         // --- Clear Form Function ---
         function clearForm() {
             document.getElementById('dropboxLink').value = '';
             document.getElementById('citation').value = '';
             document.getElementById('linkError').style.display = 'none';
             document.getElementById('results').style.display = 'none';
-            lastGeneratedUrl = '';
             document.getElementById('dropboxLink').focus();
         }
 
