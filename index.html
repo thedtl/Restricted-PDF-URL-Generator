@@ -290,11 +290,17 @@
 <!-- The PDF Reader -->
 <iframe src="${finalUrl}" width="100%" height="900" style="border: 1px solid #ccc; border-radius: 4px;" referrerpolicy="origin" allowfullscreen webkitallowfullscreen mozallowfullscreen></iframe>`;
 
-            // Create the self-contained Accordion Code (updated header + button text)
+            // Create the self-contained Accordion Code (all updates incorporated)
             const accordionCode = `<style>
-.dtl_book_accordion { margin-bottom: 12px; border: 1px solid #ccc; border-radius: 6px; overflow: hidden; }
+.dtl_book_accordion {
+  margin-bottom: 0 !important;
+  border: none !important;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: none !important;
+}
 
-/* Header: title left, button right */
+/* Header: title then button (next to it) */
 .dtl_book_header {
   background-color: #f9f9f9;
   padding: 18px 18px;
@@ -303,20 +309,24 @@
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
-  justify-content: space-between !important;
+  justify-content: flex-start !important;
   gap: 14px !important;
 
   font-family: sans-serif;
   transition: background-color 0.2s;
+  box-shadow: none !important;
 }
 .dtl_book_header:hover { background-color: #f0f0f0; }
 
+/* Remove blue focus outline */
+.dtl_book_header:focus { outline: none !important; }
+
 .dtl_citation {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   text-align: left !important;
 
-  font-size: clamp(17.6px, 1.92vw, 24px) !important;
+  font-size: clamp(11.264px, 1.2288vw, 15.36px) !important;
   font-weight: 800 !important;
   line-height: 1.2;
 
@@ -331,21 +341,41 @@
   color: #666;
 
   padding: 6px 14px;
-  border: 1px solid #ccc;
+  border: none !important;
   border-radius: 999px;
   background: #fff;
   white-space: nowrap;
+  box-shadow: none !important;
 }
 .dtl_book_header:hover .dtl_toggle_text { background: #eee; }
 
 /* Expand/collapse */
 .dtl_book_content { max-height: 0; overflow: hidden; transition: max-height 0.4s ease-out; }
-.dtl_book_accordion.dtl_open .dtl_book_content { max-height: 1000px; }
+.dtl_book_accordion.dtl_open .dtl_book_content { max-height: 2000px; }
 
-.dtl_book_content_inner { padding: 12px; background: #fff; }
+/* Prevent any “sliver” when closed */
+.dtl_book_content_inner {
+  padding: 0;
+  background: transparent;
+  margin: 0;
+}
+.dtl_book_accordion.dtl_open .dtl_book_content_inner {
+  padding: 12px;
+  background: #fff;
+}
 
 .dtl_fullscreen_link { text-align: right; margin-bottom: 8px; }
-.dtl_fullscreen_link a { text-decoration: none; color: #333; font-family: sans-serif; font-size: 0.9em; border: 1px solid #ccc; padding: 5px 10px; border-radius: 4px; background-color: #f9f9f9; }
+.dtl_fullscreen_link a {
+  text-decoration: none;
+  color: #333;
+  font-family: sans-serif;
+  font-size: 0.9em;
+  border: none !important;
+  padding: 5px 10px;
+  border-radius: 4px;
+  background-color: #f9f9f9;
+  box-shadow: none !important;
+}
 .dtl_fullscreen_link a:hover { background-color: #eee; }
 </style>
 
@@ -365,7 +395,7 @@
         </a>
       </div>
       <iframe src="${finalUrl}" width="100%" height="700"
-        style="border: 1px solid #ccc; border-radius: 4px;"
+        style="border: none !important; border-radius: 4px; box-shadow: none !important;"
         referrerpolicy="origin" allowfullscreen></iframe>
     </div>
   </div>
