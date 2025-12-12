@@ -290,73 +290,85 @@
 <!-- The PDF Reader -->
 <iframe src="${finalUrl}" width="100%" height="900" style="border: 1px solid #ccc; border-radius: 4px;" referrerpolicy="origin" allowfullscreen webkitallowfullscreen mozallowfullscreen></iframe>`;
 
-            // Create the self-contained Accordion Code
+            // Create the self-contained Accordion Code (updated header + button text)
             const accordionCode = `<style>
-.book-accordion { margin-bottom: 12px; border: 1px solid #ccc; border-radius: 6px; overflow: hidden; }
+.dtl_book_accordion { margin-bottom: 12px; border: 1px solid #ccc; border-radius: 6px; overflow: hidden; }
 
-/* Updated accordion header styles: larger, bold, centered */
-.book-header {
+/* Header: title left, button right */
+.dtl_book_header {
   background-color: #f9f9f9;
-  padding: 16px 18px;
+  padding: 18px 18px;
   cursor: pointer;
 
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 8px;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
 
   font-family: sans-serif;
   transition: background-color 0.2s;
-  text-align: center;
 }
-.book-header:hover { background-color: #f0f0f0; }
+.dtl_book_header:hover { background-color: #f0f0f0; }
 
-.book-header .citation {
-  width: 100%;
-  font-size: clamp(18px, 2.2vw, 22px);
-  font-weight: 700;
-  line-height: 1.25;
+.dtl_citation {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left !important;
+
+  font-size: clamp(22px, 2.4vw, 30px) !important;
+  font-weight: 800 !important;
+  line-height: 1.2;
+
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-.book-header .toggle-text {
-  font-size: 1rem;
-  font-weight: 700;
+.dtl_toggle_text {
+  flex: 0 0 auto;
+  font-size: 1rem !important;
+  font-weight: 800 !important;
   color: #666;
 
-  margin-left: 0;
   padding: 6px 14px;
-
   border: 1px solid #ccc;
   border-radius: 999px;
   background: #fff;
   white-space: nowrap;
 }
-.book-header:hover .toggle-text { background: #eee; }
+.dtl_book_header:hover .dtl_toggle_text { background: #eee; }
 
-.book-content { max-height: 0; overflow: hidden; transition: max-height 0.4s ease-out; }
-.book-accordion.open .book-content { max-height: 1000px; }
-.book-content-inner { padding: 12px; background: #fff; }
-.fullscreen-link { text-align: right; margin-bottom: 8px; }
-.fullscreen-link a { text-decoration: none; color: #333; font-family: sans-serif; font-size: 0.9em; border: 1px solid #ccc; padding: 5px 10px; border-radius: 4px; background-color: #f9f9f9; }
-.fullscreen-link a:hover { background-color: #eee; }
+/* Expand/collapse */
+.dtl_book_content { max-height: 0; overflow: hidden; transition: max-height 0.4s ease-out; }
+.dtl_book_accordion.dtl_open .dtl_book_content { max-height: 1000px; }
+
+.dtl_book_content_inner { padding: 12px; background: #fff; }
+
+.dtl_fullscreen_link { text-align: right; margin-bottom: 8px; }
+.dtl_fullscreen_link a { text-decoration: none; color: #333; font-family: sans-serif; font-size: 0.9em; border: 1px solid #ccc; padding: 5px 10px; border-radius: 4px; background-color: #f9f9f9; }
+.dtl_fullscreen_link a:hover { background-color: #eee; }
 </style>
 
-<div class="book-accordion">
-    <div class="book-header" tabindex="0" onclick="(function(el){var a=el.parentElement,t=el.querySelector('.toggle-text');a.classList.toggle('open');t.textContent=a.classList.contains('open')?'Collapse':'Preview';})(this)" onkeydown="if(event.key==='Enter'){this.click()}">
-        <div class="citation">${citation}</div>
-        <span class="toggle-text">Preview</span>
+<div class="dtl_book_accordion">
+  <div class="dtl_book_header" tabindex="0"
+    onclick="(function(el){var a=el.parentElement,t=el.querySelector('.dtl_toggle_text');a.classList.toggle('dtl_open');t.textContent=a.classList.contains('dtl_open')?'Collapse':'Click to See Preview';})(this)"
+    onkeydown="if(event.key==='Enter'){this.click()}">
+    <div class="dtl_citation">${citation}</div>
+    <span class="dtl_toggle_text">Click to See Preview</span>
+  </div>
+
+  <div class="dtl_book_content">
+    <div class="dtl_book_content_inner">
+      <div class="dtl_fullscreen_link">
+        <a href="${finalUrl}" target="_blank" rel="noopener">
+          <span style="margin-right: 4px;">↗</span> Open Preview (20%)
+        </a>
+      </div>
+      <iframe src="${finalUrl}" width="100%" height="700"
+        style="border: 1px solid #ccc; border-radius: 4px;"
+        referrerpolicy="origin" allowfullscreen></iframe>
     </div>
-    <div class="book-content">
-        <div class="book-content-inner">
-            <div class="fullscreen-link">
-                <a href="${finalUrl}" target="_blank" rel="noopener">
-                    <span style="margin-right: 4px;">↗</span> Open Preview (20%)
-                </a>
-            </div>
-            <iframe src="${finalUrl}" width="100%" height="700" style="border: 1px solid #ccc; border-radius: 4px;" referrerpolicy="origin" allowfullscreen></iframe>
-        </div>
-    </div>
+  </div>
 </div>`;
 
             // Show Results
