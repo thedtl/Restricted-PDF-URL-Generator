@@ -47,7 +47,7 @@
             font-family: 'Inter', sans-serif;
         }
         input:focus, textarea:focus { border-color: #0061fe; }
-        
+
         textarea {
             resize: vertical;
             min-height: 60px;
@@ -60,7 +60,7 @@
             margin-top: -10px;
             margin-bottom: 15px;
         }
-        
+
         .input-error {
             font-size: 12px;
             color: #dc3545;
@@ -101,8 +101,8 @@
             border-radius: 8px;
             transition: all 0.2s;
         }
-        .clear-btn:hover { 
-            background: #e9ecef; 
+        .clear-btn:hover {
+            background: #e9ecef;
             border-color: #ccc;
         }
 
@@ -125,7 +125,7 @@
             display: block;
             margin-bottom: 8px;
         }
-        
+
         label:first-of-type {
             margin-top: 0;
         }
@@ -200,17 +200,17 @@
 
         <input type="text" id="dropboxLink" placeholder="https://www.dropbox.com/..." autofocus>
         <div class="input-error" id="linkError">Please enter a valid Dropbox link.</div>
-        
+
         <textarea id="citation" placeholder="Author, Name. Book Title. Place: Publisher, Year."></textarea>
         <div class="input-hint">Optional: Add citation for accordion-style output (HTML like &lt;em&gt; allowed)</div>
-        
+
         <div class="button-row">
             <button class="generate-btn" onclick="generateLink()">Generate Code</button>
             <button class="clear-btn" onclick="clearForm()">Clear</button>
         </div>
 
         <div id="results" style="display:none;">
-            
+
             <label>Master Link</label>
             <div class="result-wrapper">
                 <div class="code-box" id="finalLink"></div>
@@ -244,14 +244,14 @@
             const input = document.getElementById('dropboxLink').value.trim();
             const citation = document.getElementById('citation').value.trim() || 'Author, Name. <em>Book Title</em>. Year.';
             const errorEl = document.getElementById('linkError');
-            
+
             // Reset error state
             errorEl.style.display = 'none';
 
-            if (!input) { 
+            if (!input) {
                 errorEl.textContent = "Please paste a link first!";
                 errorEl.style.display = 'block';
-                return; 
+                return;
             }
 
             // Validate it's a Dropbox link
@@ -262,21 +262,21 @@
             }
 
             let base64Link;
-            try { 
+            try {
                 // Properly encode UTF-8 characters before base64
                 base64Link = btoa(encodeURIComponent(input).replace(/%([0-9A-F]{2})/g,
                     function toSolidBytes(match, p1) {
                         return String.fromCharCode('0x' + p1);
                 }));
-            } catch (e) { 
+            } catch (e) {
                 errorEl.textContent = "Error: Could not encode link.";
                 errorEl.style.display = 'block';
-                return; 
+                return;
             }
 
             // Build the worker URL with the encoded file parameter
             const workerWithFile = `${WORKER_URL}?file=${base64Link}`;
-            
+
             // IMPORTANT: URL-encode the entire worker URL to avoid nested query string issues
             const finalUrl = `${VIEWER_URL}?file=${encodeURIComponent(workerWithFile)}`;
 
@@ -293,11 +293,47 @@
             // Create the self-contained Accordion Code
             const accordionCode = `<style>
 .book-accordion { margin-bottom: 12px; border: 1px solid #ccc; border-radius: 6px; overflow: hidden; }
-.book-header { background-color: #f9f9f9; padding: 12px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-family: sans-serif; transition: background-color 0.2s; }
+
+/* Updated accordion header styles: larger, bold, centered */
+.book-header {
+  background-color: #f9f9f9;
+  padding: 16px 18px;
+  cursor: pointer;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+
+  font-family: sans-serif;
+  transition: background-color 0.2s;
+  text-align: center;
+}
 .book-header:hover { background-color: #f0f0f0; }
-.book-header .citation { flex: 1; }
-.book-header .toggle-text { font-size: 0.85em; color: #666; margin-left: 12px; padding: 4px 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; white-space: nowrap; }
+
+.book-header .citation {
+  width: 100%;
+  font-size: clamp(18px, 2.2vw, 22px);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.book-header .toggle-text {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #666;
+
+  margin-left: 0;
+  padding: 6px 14px;
+
+  border: 1px solid #ccc;
+  border-radius: 999px;
+  background: #fff;
+  white-space: nowrap;
+}
 .book-header:hover .toggle-text { background: #eee; }
+
 .book-content { max-height: 0; overflow: hidden; transition: max-height 0.4s ease-out; }
 .book-accordion.open .book-content { max-height: 1000px; }
 .book-content-inner { padding: 12px; background: #fff; }
@@ -342,7 +378,7 @@
         // --- Copy Functionality ---
         function copyToClipboard(elementId, btnElement) {
             const textToCopy = document.getElementById(elementId).textContent;
-            
+
             navigator.clipboard.writeText(textToCopy).then(() => {
                 const originalText = btnElement.textContent;
                 btnElement.textContent = "Copied!";
