@@ -34,7 +34,7 @@
         p { color: #666; margin-bottom: 25px; }
 
         /* --- Inputs & Main Button --- */
-        input, textarea {
+        input[type="text"], textarea {
             width: 100%;
             padding: 14px;
             font-size: 16px;
@@ -46,7 +46,7 @@
             margin-bottom: 15px;
             font-family: 'Inter', sans-serif;
         }
-        input:focus, textarea:focus { border-color: #0061fe; }
+        input[type="text"]:focus, textarea:focus { border-color: #0061fe; }
 
         textarea {
             resize: vertical;
@@ -68,6 +68,152 @@
             margin-top: -10px;
             margin-bottom: 15px;
             display: none;
+        }
+
+        /* --- Restriction Controls --- */
+        .restriction-panel {
+            background: #f8f9fa;
+            border: 2px solid #e1e1e1;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .restriction-panel h3 {
+            margin: 0 0 15px 0;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #666;
+        }
+
+        .restriction-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .restriction-row:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Checkbox styles */
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .checkbox-row input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #0061fe;
+        }
+
+        .checkbox-row label {
+            font-size: 14px;
+            color: #333;
+            cursor: pointer;
+            margin: 0;
+            user-select: none;
+        }
+
+        /* Slider row */
+        .slider-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding-left: 28px;
+            margin-bottom: 15px;
+        }
+
+        .slider-row.disabled {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        .slider-row label {
+            font-size: 14px;
+            color: #333;
+            margin: 0;
+            min-width: 100px;
+        }
+
+        .slider-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        input[type="range"] {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #0061fe;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #0061fe;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+
+        .slider-value {
+            background: #0061fe;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+            min-width: 45px;
+            text-align: center;
+        }
+
+        /* Access mode indicator */
+        .access-mode {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+
+        .access-mode.preview {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .access-mode.view-only {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .access-mode.full {
+            background: #d4edda;
+            color: #155724;
         }
 
         .button-row {
@@ -115,7 +261,7 @@
             animation: fadeIn 0.5s ease;
         }
 
-        label {
+        .results-label {
             font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -126,7 +272,7 @@
             margin-bottom: 8px;
         }
 
-        label:first-of-type {
+        .results-label:first-of-type {
             margin-top: 0;
         }
 
@@ -195,14 +341,41 @@
 <body>
 
     <div class="card">
-        <h1>LibGuide PDF Generator (20% Limit)</h1>
-        <p>Paste your Dropbox link below to generate the viewer code.</p>
+        <h1>LibGuide PDF Generator</h1>
+        <p>Paste your Dropbox link and configure access restrictions.</p>
 
         <input type="text" id="dropboxLink" placeholder="https://www.dropbox.com/..." autofocus>
         <div class="input-error" id="linkError">Please enter a valid Dropbox link.</div>
 
         <textarea id="citation" placeholder="Author, Name. Book Title. Place: Publisher, Year."></textarea>
         <div class="input-hint">Optional: Add citation for accordion-style output (HTML like &lt;em&gt; allowed)</div>
+
+        <!-- Restriction Controls -->
+        <div class="restriction-panel">
+            <h3>Access Restrictions</h3>
+            
+            <div class="checkbox-row">
+                <input type="checkbox" id="noLimitCheckbox">
+                <label for="noLimitCheckbox">No viewing limits (full document)</label>
+            </div>
+            
+            <div class="slider-row" id="sliderRow">
+                <label for="limitSlider">Preview limit:</label>
+                <div class="slider-container">
+                    <input type="range" id="limitSlider" min="5" max="95" step="5" value="20">
+                    <span class="slider-value" id="limitValue">20%</span>
+                </div>
+            </div>
+            
+            <div class="checkbox-row">
+                <input type="checkbox" id="downloadCheckbox">
+                <label for="downloadCheckbox">Allow download</label>
+            </div>
+            
+            <div style="text-align: center;">
+                <span class="access-mode preview" id="accessMode">Preview Mode (20%)</span>
+            </div>
+        </div>
 
         <div class="button-row">
             <button class="generate-btn" onclick="generateLink()">Generate Code</button>
@@ -211,13 +384,13 @@
 
         <div id="results" style="display:none;">
 
-            <label>Master Link</label>
+            <span class="results-label">Master Link</span>
             <div class="result-wrapper">
                 <div class="code-box" id="finalLink"></div>
                 <button class="copy-btn" onclick="copyToClipboard('finalLink', this)">Copy</button>
             </div>
 
-            <label>Standard Embed Code</label>
+            <span class="results-label">Standard Embed Code</span>
             <div class="result-wrapper">
                 <div class="code-box" id="embedCode"></div>
                 <button class="copy-btn" onclick="copyToClipboard('embedCode', this)">Copy</button>
@@ -225,7 +398,7 @@
 
             <div class="section-divider"><span>Accordion Style</span></div>
 
-            <label>Accordion Code (Self-contained)</label>
+            <span class="results-label">Accordion Code (Self-contained)</span>
             <div class="result-wrapper">
                 <div class="code-box" id="accordionCode"></div>
                 <button class="copy-btn" onclick="copyToClipboard('accordionCode', this)">Copy</button>
@@ -235,15 +408,63 @@
     </div>
 
     <script>
-        // --- YOUR SETTINGS (RESTRICTED 20% VERSION) ---
-        const VIEWER_URL = "https://thedtl.github.io/restricted-pdf-reader/web/viewer.html";
+        // --- YOUR SETTINGS ---
+        const VIEWER_URL = "https://thedtl.github.io/Customizable-Reader/web/viewer.html";
         const WORKER_URL = "https://restricteddropboxguard.ccrawford.workers.dev/";
         // ---------------------
 
+        // --- UI State Management ---
+        const limitSlider = document.getElementById('limitSlider');
+        const limitValue = document.getElementById('limitValue');
+        const noLimitCheckbox = document.getElementById('noLimitCheckbox');
+        const downloadCheckbox = document.getElementById('downloadCheckbox');
+        const sliderRow = document.getElementById('sliderRow');
+        const accessMode = document.getElementById('accessMode');
+
+        function updateUI() {
+            const noLimit = noLimitCheckbox.checked;
+            const limit = noLimit ? 100 : parseInt(limitSlider.value);
+            const downloadEnabled = downloadCheckbox.checked;
+
+            // Grey out slider when no limit is checked
+            if (noLimit) {
+                sliderRow.classList.add('disabled');
+            } else {
+                sliderRow.classList.remove('disabled');
+            }
+
+            // Update slider display
+            limitValue.textContent = limitSlider.value + '%';
+
+            // Update access mode badge
+            if (!noLimit) {
+                accessMode.textContent = `Preview Mode (${limitSlider.value}%)`;
+                accessMode.className = 'access-mode preview';
+            } else if (!downloadEnabled) {
+                accessMode.textContent = 'View Only (No Download)';
+                accessMode.className = 'access-mode view-only';
+            } else {
+                accessMode.textContent = 'Full Access';
+                accessMode.className = 'access-mode full';
+            }
+        }
+
+        limitSlider.addEventListener('input', updateUI);
+        noLimitCheckbox.addEventListener('change', updateUI);
+        downloadCheckbox.addEventListener('change', updateUI);
+
+        // Initialize UI
+        updateUI();
+
+        // --- Generate Link ---
         function generateLink() {
             const input = document.getElementById('dropboxLink').value.trim();
             const citation = document.getElementById('citation').value.trim() || 'Author, Name. <em>Book Title</em>. Year.';
             const errorEl = document.getElementById('linkError');
+            
+            const noLimit = noLimitCheckbox.checked;
+            const limit = noLimit ? 100 : parseInt(limitSlider.value);
+            const allowDownload = downloadCheckbox.checked;
 
             // Reset error state
             errorEl.style.display = 'none';
@@ -263,7 +484,6 @@
 
             let base64Link;
             try {
-                // Properly encode UTF-8 characters before base64
                 base64Link = btoa(encodeURIComponent(input).replace(/%([0-9A-F]{2})/g,
                     function toSolidBytes(match, p1) {
                         return String.fromCharCode('0x' + p1);
@@ -277,20 +497,30 @@
             // Build the worker URL with the encoded file parameter
             const workerWithFile = `${WORKER_URL}?file=${base64Link}`;
 
-            // IMPORTANT: URL-encode the entire worker URL to avoid nested query string issues
-            const finalUrl = `${VIEWER_URL}?file=${encodeURIComponent(workerWithFile)}`;
+            // Build viewer URL with restriction parameters
+            const viewerParams = new URLSearchParams();
+            viewerParams.set('file', workerWithFile);
+            viewerParams.set('limit', limit.toString());
+            viewerParams.set('download', allowDownload.toString());
+
+            const finalUrl = `${VIEWER_URL}?${viewerParams.toString()}`;
+
+            // Generate button text based on settings
+            const buttonText = limit === 100 
+                ? (allowDownload ? 'Open PDF' : 'Open PDF (View Only)')
+                : `Open Preview (${limit}%)`;
 
             // Create the standard HTML embed code
             const embedHtml = `<!-- Mobile Friendly Link -->
 <div style="text-align: right; margin-bottom: 8px;">
     <a href="${finalUrl}" target="_blank" rel="noopener" style="text-decoration: none; color: #333; font-family: sans-serif; font-size: 0.9em; border: 1px solid #ccc; padding: 5px 10px; border-radius: 4px; background-color: #f9f9f9;">
-        <span style="font-size: 1.1em; margin-right: 4px;">&#x2197;</span> Open Preview (20%)
+        <span style="font-size: 1.1em; margin-right: 4px;">&#x2197;</span> ${buttonText}
     </a>
 </div>
 <!-- The PDF Reader -->
 <iframe src="${finalUrl}" width="100%" height="900" style="border: 1px solid #ccc; border-radius: 4px;" referrerpolicy="origin" allowfullscreen webkitallowfullscreen mozallowfullscreen></iframe>`;
 
-            // Create the self-contained Accordion Code (all updates incorporated)
+            // Create the self-contained Accordion Code
             const accordionCode = `<style>
 .dtl_book_accordion {
   margin-bottom: 0 !important;
@@ -300,36 +530,29 @@
   box-shadow: none !important;
 }
 
-/* Header: title then button (next to it) */
 .dtl_book_header {
   background-color: #f9f9f9;
   padding: 18px 18px;
   cursor: pointer;
-
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
   justify-content: flex-start !important;
   gap: 14px !important;
-
   font-family: sans-serif;
   transition: background-color 0.2s;
   box-shadow: none !important;
 }
 .dtl_book_header:hover { background-color: #f0f0f0; }
-
-/* Remove blue focus outline */
 .dtl_book_header:focus { outline: none !important; }
 
 .dtl_citation {
   flex: 0 1 auto;
   min-width: 0;
   text-align: left !important;
-
   font-size: clamp(11.264px, 1.2288vw, 15.36px) !important;
   font-weight: 800 !important;
   line-height: 1.2;
-
   white-space: normal;
   overflow-wrap: anywhere;
 }
@@ -339,7 +562,6 @@
   font-size: 1rem !important;
   font-weight: 800 !important;
   color: #666;
-
   padding: 6px 14px;
   border: none !important;
   border-radius: 999px;
@@ -349,11 +571,9 @@
 }
 .dtl_book_header:hover .dtl_toggle_text { background: #eee; }
 
-/* Expand/collapse */
 .dtl_book_content { max-height: 0; overflow: hidden; transition: max-height 0.4s ease-out; }
 .dtl_book_accordion.dtl_open .dtl_book_content { max-height: 2000px; }
 
-/* Prevent any “sliver” when closed */
 .dtl_book_content_inner {
   padding: 0;
   background: transparent;
@@ -391,7 +611,7 @@
     <div class="dtl_book_content_inner">
       <div class="dtl_fullscreen_link">
         <a href="${finalUrl}" target="_blank" rel="noopener">
-          <span style="margin-right: 4px;">↗</span> Open Preview (20%)
+          <span style="margin-right: 4px;">↗</span> ${buttonText}
         </a>
       </div>
       <iframe src="${finalUrl}" width="100%" height="700"
@@ -414,6 +634,13 @@
             document.getElementById('citation').value = '';
             document.getElementById('linkError').style.display = 'none';
             document.getElementById('results').style.display = 'none';
+            
+            // Reset restrictions to defaults
+            limitSlider.value = 20;
+            noLimitCheckbox.checked = false;
+            downloadCheckbox.checked = false;
+            updateUI();
+            
             document.getElementById('dropboxLink').focus();
         }
 
