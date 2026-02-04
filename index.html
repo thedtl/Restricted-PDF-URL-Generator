@@ -503,7 +503,7 @@
             viewerParams.set('limit', limit.toString());
             viewerParams.set('download', allowDownload.toString());
 
-            const finalUrl = `${VIEWER_URL}?${viewerParams.toString()}`;
+            const finalUrl = `${VIEWER_URL}?${viewerParams.toString()}#pagemode=none`;
 
             // Generate button text based on settings
             const buttonText = limit === 100 
