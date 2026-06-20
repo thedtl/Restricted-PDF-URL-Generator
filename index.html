@@ -100,23 +100,12 @@
             color: #666;
         }
 
-        .restriction-row {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 15px;
-        }
-
-        .restriction-row:last-child {
-            margin-bottom: 0;
-        }
-
         /* Checkbox styles */
         .checkbox-row {
             display: flex;
             align-items: center;
             gap: 10px;
-            margin-bottom: 12px;
+            margin-bottom: 0;
         }
 
         .checkbox-row input[type="checkbox"] {
@@ -132,100 +121,6 @@
             cursor: pointer;
             margin: 0;
             user-select: none;
-        }
-
-        /* Slider row */
-        .slider-row {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding-left: 28px;
-            margin-bottom: 15px;
-        }
-
-        .slider-row.disabled {
-            opacity: 0.4;
-            pointer-events: none;
-        }
-
-        .slider-row label {
-            font-size: 14px;
-            color: #333;
-            margin: 0;
-            min-width: 100px;
-        }
-
-        .slider-container {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        input[type="range"] {
-            flex: 1;
-            height: 6px;
-            border-radius: 3px;
-            background: #ddd;
-            outline: none;
-            -webkit-appearance: none;
-        }
-
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: #0061fe;
-            cursor: pointer;
-            border: 2px solid white;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-        }
-
-        input[type="range"]::-moz-range-thumb {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: #0061fe;
-            cursor: pointer;
-            border: 2px solid white;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-        }
-
-        .slider-value {
-            background: #0061fe;
-            color: white;
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-size: 13px;
-            font-weight: 600;
-            min-width: 45px;
-            text-align: center;
-        }
-
-        /* Access mode indicator */
-        .access-mode {
-            display: inline-block;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            margin-top: 10px;
-        }
-
-        .access-mode.preview {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        .access-mode.view-only {
-            background: #d1ecf1;
-            color: #0c5460;
-        }
-
-        .access-mode.full {
-            background: #d4edda;
-            color: #155724;
         }
 
         .button-row {
@@ -354,7 +249,7 @@
 
     <div class="card">
         <h1>LibGuide PDF Generator</h1>
-        <p>Paste your Dropbox link and configure access restrictions.</p>
+        <p>Paste your Dropbox link and choose whether downloading is allowed.</p>
 
         <input type="text" id="dropboxLink" placeholder="https://www.dropbox.com/..." autofocus>
         <div class="input-error" id="linkError">Please enter a valid Dropbox link.</div>
@@ -366,27 +261,9 @@
         <!-- Restriction Controls -->
         <div class="restriction-panel">
             <h3>Access Restrictions</h3>
-            
-            <div class="checkbox-row">
-                <input type="checkbox" id="noLimitCheckbox">
-                <label for="noLimitCheckbox">No viewing limits (full document)</label>
-            </div>
-            
-            <div class="slider-row" id="sliderRow">
-                <label for="limitSlider">Preview limit:</label>
-                <div class="slider-container">
-                    <input type="range" id="limitSlider" min="5" max="95" step="5" value="20">
-                    <span class="slider-value" id="limitValue">20%</span>
-                </div>
-            </div>
-            
             <div class="checkbox-row">
                 <input type="checkbox" id="downloadCheckbox">
                 <label for="downloadCheckbox">Allow download</label>
-            </div>
-            
-            <div style="text-align: center;">
-                <span class="access-mode preview" id="accessMode">Preview Mode (20%)</span>
             </div>
         </div>
 
@@ -429,48 +306,7 @@
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-        // --- UI State Management ---
-        const limitSlider = document.getElementById('limitSlider');
-        const limitValue = document.getElementById('limitValue');
-        const noLimitCheckbox = document.getElementById('noLimitCheckbox');
         const downloadCheckbox = document.getElementById('downloadCheckbox');
-        const sliderRow = document.getElementById('sliderRow');
-        const accessMode = document.getElementById('accessMode');
-
-        function updateUI() {
-            const noLimit = noLimitCheckbox.checked;
-            const limit = noLimit ? 100 : parseInt(limitSlider.value);
-            const downloadEnabled = downloadCheckbox.checked;
-
-            // Grey out slider when no limit is checked
-            if (noLimit) {
-                sliderRow.classList.add('disabled');
-            } else {
-                sliderRow.classList.remove('disabled');
-            }
-
-            // Update slider display
-            limitValue.textContent = limitSlider.value + '%';
-
-            // Update access mode badge
-            if (!noLimit) {
-                accessMode.textContent = `Preview Mode (${limitSlider.value}%)`;
-                accessMode.className = 'access-mode preview';
-            } else if (!downloadEnabled) {
-                accessMode.textContent = 'View Only (No Download)';
-                accessMode.className = 'access-mode view-only';
-            } else {
-                accessMode.textContent = 'Full Access';
-                accessMode.className = 'access-mode full';
-            }
-        }
-
-        limitSlider.addEventListener('input', updateUI);
-        noLimitCheckbox.addEventListener('change', updateUI);
-        downloadCheckbox.addEventListener('change', updateUI);
-
-        // Initialize UI
-        updateUI();
 
         function showCitationNote(message, type = '') {
             const note = document.getElementById('citationSuggestionNote');
@@ -802,8 +638,7 @@
             const errorEl = document.getElementById('linkError');
             const generateButton = document.getElementById('generateButton');
             
-            const noLimit = noLimitCheckbox.checked;
-            const limit = noLimit ? 100 : parseInt(limitSlider.value);
+            const limit = 100;
             const allowDownload = downloadCheckbox.checked;
 
             // Reset error state
@@ -865,10 +700,8 @@
 
             const finalUrl = `${VIEWER_URL}?${viewerParams.toString()}#pagemode=none`;
 
-            // Generate button text based on settings
-            const buttonText = limit === 100 
-                ? (allowDownload ? 'Open PDF' : 'Open PDF (View Only)')
-                : `Open Preview (${limit}%)`;
+            // Generate button text based on download setting
+            const buttonText = allowDownload ? 'Open PDF' : 'Open PDF (View Only)';
 
             // Create the standard HTML embed code
             const embedHtml = `<!-- Mobile Friendly Link -->
@@ -998,11 +831,7 @@
             showCitationNote('');
             document.getElementById('results').style.display = 'none';
             
-            // Reset restrictions to defaults
-            limitSlider.value = 20;
-            noLimitCheckbox.checked = false;
             downloadCheckbox.checked = false;
-            updateUI();
             
             document.getElementById('dropboxLink').focus();
         }
