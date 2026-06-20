@@ -70,6 +70,18 @@
             display: none;
         }
 
+        .field-note {
+            display: none;
+            font-size: 12px;
+            color: #666;
+            text-align: left;
+            margin-top: -10px;
+            margin-bottom: 15px;
+        }
+
+        .field-note.success { color: #198754; }
+        .field-note.error { color: #dc3545; }
+
         /* --- Restriction Controls --- */
         .restriction-panel {
             background: #f8f9fa;
@@ -347,8 +359,9 @@
         <input type="text" id="dropboxLink" placeholder="https://www.dropbox.com/..." autofocus>
         <div class="input-error" id="linkError">Please enter a valid Dropbox link.</div>
 
-        <textarea id="citation" placeholder="Author, Name. Book Title. Place: Publisher, Year."></textarea>
+        <textarea id="citation" placeholder="Leave blank to fill from the PDF, or type your own Chicago-style citation"></textarea>
         <div class="input-hint">Optional: Add citation for accordion-style output (HTML like &lt;em&gt; allowed)</div>
+        <div id="citationSuggestionNote" class="field-note"></div>
 
         <!-- Restriction Controls -->
         <div class="restriction-panel">
@@ -378,7 +391,7 @@
         </div>
 
         <div class="button-row">
-            <button class="generate-btn" onclick="generateLink()">Generate Code</button>
+            <button class="generate-btn" id="generateButton" onclick="generateLink()">Generate Code</button>
             <button class="clear-btn" onclick="clearForm()">Clear</button>
         </div>
 
@@ -407,11 +420,14 @@
         </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
         // --- YOUR SETTINGS ---
         const VIEWER_URL = "https://thedtl.github.io/Customizable-Reader/web/viewer.html";
         const WORKER_URL = "https://restricteddropboxguard.ccrawford.workers.dev/";
         // ---------------------
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
         // --- UI State Management ---
         const limitSlider = document.getElementById('limitSlider');
@@ -456,11 +472,335 @@
         // Initialize UI
         updateUI();
 
+        function showCitationNote(message, type = '') {
+            const note = document.getElementById('citationSuggestionNote');
+            note.textContent = message;
+            note.className = 'field-note' + (type ? ' ' + type : '');
+            note.style.display = message ? 'block' : 'none';
+        }
+
+        async function fillCitationFromPdfIfNeeded(pdfUrl) {
+            const citationInput = document.getElementById('citation');
+            if (citationInput.value.trim()) {
+                showCitationNote('');
+                return citationInput.value.trim();
+            }
+
+            showCitationNote('Reading the first pages and filling the citation...');
+
+            const pdf = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
+            const citation = await buildCitationFromPdf(pdf);
+
+            if (!citation) {
+                throw new Error('No clear citation was found. Please type the citation manually, then generate again.');
+            }
+
+            citationInput.value = citation;
+            showCitationNote('Citation filled from PDF. Please review it before copying.', 'success');
+            return citation;
+        }
+
+        async function buildCitationFromPdf(pdf) {
+            let frontMatterCitation = '';
+
+            try {
+                const lines = await extractFrontMatterLines(pdf, 8);
+                frontMatterCitation = buildCitationSuggestion(lines);
+            } catch (error) {
+                console.warn('Could not read PDF front matter:', error);
+            }
+
+            return frontMatterCitation || await readPdfMetadataCitation(pdf);
+        }
+
+        async function readPdfMetadataCitation(pdf) {
+            try {
+                const metadataResult = await pdf.getMetadata();
+                const info = metadataResult.info || {};
+                const metadata = metadataResult.metadata || null;
+                const title = firstUsefulText([
+                    readMetadataValue(metadata, 'dc:title'),
+                    readMetadataValue(metadata, 'pdf:title'),
+                    info.Title
+                ].filter(isUsefulMetadataTitle));
+                const author = firstUsefulText([
+                    readMetadataValue(metadata, 'dc:creator'),
+                    info.Author
+                ]);
+                const year = extractYear(
+                    readMetadataValue(metadata, 'xmp:createdate') ||
+                    readMetadataValue(metadata, 'xmp:modifydate') ||
+                    info.CreationDate ||
+                    info.ModDate
+                );
+
+                if (!title && !author) return '';
+                return formatChicagoCitation(author, title, year);
+            } catch (error) {
+                console.warn('Could not read PDF metadata:', error);
+                return '';
+            }
+        }
+
+        async function extractFrontMatterLines(pdf, maxPages) {
+            const pageLimit = Math.min(pdf.numPages, maxPages);
+            const lines = [];
+
+            for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber++) {
+                const page = await pdf.getPage(pageNumber);
+                const content = await page.getTextContent();
+                lines.push(...groupTextItemsIntoLines(content.items, pageNumber));
+            }
+
+            return lines;
+        }
+
+        function groupTextItemsIntoLines(items, pageNumber) {
+            const rows = new Map();
+
+            items.forEach(item => {
+                const raw = String(item.str || '').trim();
+                if (!raw) return;
+
+                const transform = item.transform || [];
+                const x = Number(transform[4] || 0);
+                const y = Number(transform[5] || 0);
+                const fontSize = Math.abs(Number(transform[0] || item.height || 0));
+                const key = Math.round(y / 3) * 3;
+
+                if (!rows.has(key)) {
+                    rows.set(key, []);
+                }
+
+                rows.get(key).push({ text: raw, x, fontSize });
+            });
+
+            return [...rows.entries()]
+                .sort((a, b) => b[0] - a[0])
+                .map(([, parts]) => {
+                    const sorted = parts.sort((a, b) => a.x - b.x);
+                    const text = cleanFrontMatterLine(sorted.map(part => part.text).join(' '));
+                    const maxFontSize = Math.max(...sorted.map(part => part.fontSize || 0));
+                    return { text, pageNumber, fontSize: maxFontSize };
+                })
+                .filter(line => line.text);
+        }
+
+        function buildCitationSuggestion(lines) {
+            const candidates = lines
+                .map((line, index) => ({ ...line, index }))
+                .filter(line => isUsefulFrontMatterLine(line.text));
+
+            if (candidates.length === 0) {
+                return '';
+            }
+
+            const title = chooseTitleLine(candidates);
+            const author = title ? chooseAuthorLine(candidates, title.index) : '';
+
+            if (author && title) {
+                return formatChicagoCitation(author, title.text);
+            }
+
+            if (title) {
+                return formatChicagoCitation('', title.text);
+            }
+
+            return escapeHtml(cleanCitationText(candidates[0].text));
+        }
+
+        function chooseTitleLine(candidates) {
+            const scored = candidates.map(line => ({
+                ...line,
+                score: scoreTitleCandidate(line)
+            }));
+
+            scored.sort((a, b) => b.score - a.score);
+            return scored[0] && scored[0].score > 0 ? scored[0] : null;
+        }
+
+        function chooseAuthorLine(candidates, titleIndex) {
+            const authorWindow = candidates.filter(line => (
+                line.index > titleIndex &&
+                line.index <= titleIndex + 6 &&
+                looksLikeAuthorLine(line.text)
+            ));
+
+            if (authorWindow.length === 0) {
+                return '';
+            }
+
+            return cleanAuthorLine(authorWindow[0].text);
+        }
+
+        function scoreTitleCandidate(line) {
+            const text = line.text;
+            const wordCount = text.split(/\s+/).length;
+            let score = 0;
+
+            if (line.pageNumber <= 3) score += 4;
+            if (wordCount >= 2 && wordCount <= 14) score += 4;
+            if (line.fontSize >= 12) score += 2;
+            if (/^[A-Z0-9][A-Za-z0-9'":;,.& -]+$/.test(text)) score += 2;
+            if (/[a-z]/.test(text) && /[A-Z]/.test(text)) score += 1;
+            if (/^(edited by|translated by|by|chapter|contents|table of contents)\b/i.test(text)) score -= 5;
+            if (looksLikeAuthorLine(text)) score -= 2;
+            if (isMostlyAllCaps(text) && wordCount <= 3) score -= 1;
+
+            return score;
+        }
+
+        function looksLikeAuthorLine(text) {
+            const cleaned = cleanAuthorLine(text);
+            if (!cleaned) return false;
+            if (/^(edited|translated|compiled|introduction|foreword|preface)\b/i.test(cleaned)) return false;
+
+            const words = cleaned.split(/\s+/);
+            if (words.length < 2 || words.length > 8) return false;
+            if (/[0-9]/.test(cleaned)) return false;
+            if (/[.:;]/.test(cleaned)) return false;
+
+            const capitalizedWords = words.filter(word => /^[A-Z][A-Za-z'.-]+$/.test(word));
+            return capitalizedWords.length >= Math.min(2, words.length);
+        }
+
+        function isUsefulFrontMatterLine(text) {
+            if (!text || text.length < 3 || text.length > 140) return false;
+            if (/^\d+$/.test(text)) return false;
+            if (/^(copyright|all rights reserved|printed in|library of congress|isbn|issn|doi|www\.|http|publisher|published by|contents|table of contents)$/i.test(text)) return false;
+            if (/(copyright|all rights reserved|library of congress|isbn|issn|cataloging|cataloguing|manufactured in|printed in|permission|rights reserved)/i.test(text)) return false;
+            if (/^[.\-_/\\|]+$/.test(text)) return false;
+            return true;
+        }
+
+        function cleanFrontMatterLine(text) {
+            return String(text || '')
+                .replace(/\s+/g, ' ')
+                .replace(/\s+([,.;:])/g, '$1')
+                .replace(/([(["'])\s+/g, '$1')
+                .replace(/\s+([)\]"'])/g, '$1')
+                .trim();
+        }
+
+        function cleanAuthorLine(text) {
+            return cleanFrontMatterLine(text)
+                .replace(/^by\s+/i, '')
+                .replace(/^author\s*:\s*/i, '')
+                .trim();
+        }
+
+        function cleanCitationText(text) {
+            return cleanFrontMatterLine(text)
+                .replace(/\s*,\s*,/g, ',')
+                .replace(/\s+,\s+/g, ', ')
+                .trim();
+        }
+
+        function isMostlyAllCaps(text) {
+            const letters = text.replace(/[^A-Za-z]/g, '');
+            if (letters.length < 4) return false;
+            const uppercase = letters.replace(/[^A-Z]/g, '').length;
+            return uppercase / letters.length > 0.85;
+        }
+
+        function readMetadataValue(metadata, key) {
+            if (!metadata || typeof metadata.get !== 'function') return '';
+            return normalizeMetadataValue(metadata.get(key));
+        }
+
+        function normalizeMetadataValue(value) {
+            if (Array.isArray(value)) {
+                return value.map(normalizeMetadataValue).filter(Boolean).join(', ');
+            }
+
+            if (value && typeof value === 'object') {
+                if (value.value) return normalizeMetadataValue(value.value);
+                if (value['#text']) return normalizeMetadataValue(value['#text']);
+            }
+
+            return cleanFrontMatterLine(value || '');
+        }
+
+        function firstUsefulText(values) {
+            return values.map(cleanFrontMatterLine).find(Boolean) || '';
+        }
+
+        function isUsefulMetadataTitle(text) {
+            if (!text) return false;
+            if (/^(untitled|document|microsoft word)\b/i.test(text)) return false;
+            if (/\.(pdf|docx?|indd)$/i.test(text)) return false;
+            return true;
+        }
+
+        function extractYear(text) {
+            const match = String(text || '').match(/\b(1[5-9]\d{2}|20\d{2})\b/);
+            return match ? match[1] : '';
+        }
+
+        function formatChicagoCitation(author, title, year = '') {
+            const authorPart = formatChicagoAuthors(author);
+            const titlePart = title ? '<em>' + escapeHtml(trimTerminalPunctuation(title)) + '</em>.' : '';
+            const yearPart = year ? escapeHtml(year) + '.' : '';
+
+            return [authorPart ? escapeHtml(authorPart) : '', titlePart, yearPart]
+                .filter(Boolean)
+                .join(' ')
+                .trim();
+        }
+
+        function formatChicagoAuthors(author) {
+            const cleaned = cleanAuthorLine(author);
+            if (!cleaned) return '';
+
+            const names = cleaned
+                .split(/\s+(?:and|&)\s+/i)
+                .map(name => cleanFrontMatterLine(name))
+                .filter(Boolean);
+
+            if (names.length === 0) return '';
+
+            if (names.length === 1) {
+                return trimTerminalPunctuation(invertPersonalName(names[0])) + '.';
+            }
+
+            const first = trimTerminalPunctuation(invertPersonalName(names[0]));
+            const rest = names.slice(1).map(trimTerminalPunctuation);
+
+            if (rest.length === 1) {
+                return first + ', and ' + rest[0] + '.';
+            }
+
+            return first + ', ' + rest.slice(0, -1).join(', ') + ', and ' + rest[rest.length - 1] + '.';
+        }
+
+        function invertPersonalName(name) {
+            const cleaned = cleanFrontMatterLine(name);
+            if (!cleaned || cleaned.includes(',')) return cleaned;
+
+            const parts = cleaned.split(/\s+/);
+            if (parts.length < 2) return cleaned;
+
+            const suffixes = ['Jr.', 'Jr', 'Sr.', 'Sr', 'II', 'III', 'IV', 'V'];
+            let suffix = '';
+            if (suffixes.includes(parts[parts.length - 1])) {
+                suffix = parts.pop();
+            }
+
+            const last = parts.pop();
+            const given = parts.join(' ');
+            return last + ', ' + given + (suffix ? ', ' + suffix : '');
+        }
+
+        function trimTerminalPunctuation(text) {
+            return cleanFrontMatterLine(text).replace(/[.,;:]+$/g, '');
+        }
+
         // --- Generate Link ---
-        function generateLink() {
+        async function generateLink() {
             const input = document.getElementById('dropboxLink').value.trim();
-            const citation = document.getElementById('citation').value.trim() || 'Author, Name. <em>Book Title</em>. Year.';
+            let citation = document.getElementById('citation').value.trim();
             const errorEl = document.getElementById('linkError');
+            const generateButton = document.getElementById('generateButton');
             
             const noLimit = noLimitCheckbox.checked;
             const limit = noLimit ? 100 : parseInt(limitSlider.value);
@@ -468,6 +808,8 @@
 
             // Reset error state
             errorEl.style.display = 'none';
+            showCitationNote('');
+            document.getElementById('results').style.display = 'none';
 
             if (!input) {
                 errorEl.textContent = "Please paste a link first!";
@@ -496,6 +838,24 @@
 
             // Build the worker URL with the encoded file parameter
             const workerWithFile = `${WORKER_URL}?file=${base64Link}`;
+
+            generateButton.disabled = true;
+            const originalButtonText = generateButton.textContent;
+            generateButton.textContent = citation ? 'Generating...' : 'Reading PDF...';
+
+            try {
+                citation = await fillCitationFromPdfIfNeeded(workerWithFile);
+            } catch (error) {
+                console.error('Citation extraction error:', error);
+                errorEl.textContent = error.message || 'Could not fill the citation from this PDF.';
+                errorEl.style.display = 'block';
+                showCitationNote('Type the citation manually, then generate again.', 'error');
+                generateButton.disabled = false;
+                generateButton.textContent = originalButtonText;
+                return;
+            }
+
+            generateButton.textContent = 'Generating...';
 
             // Build viewer URL with restriction parameters
             const viewerParams = new URLSearchParams();
@@ -626,6 +986,8 @@
             document.getElementById('embedCode').textContent = embedHtml;
             document.getElementById('accordionCode').textContent = accordionCode;
             document.getElementById('results').style.display = 'block';
+            generateButton.disabled = false;
+            generateButton.textContent = originalButtonText;
         }
 
         // --- Clear Form Function ---
@@ -633,6 +995,7 @@
             document.getElementById('dropboxLink').value = '';
             document.getElementById('citation').value = '';
             document.getElementById('linkError').style.display = 'none';
+            showCitationNote('');
             document.getElementById('results').style.display = 'none';
             
             // Reset restrictions to defaults
