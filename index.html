@@ -365,6 +365,7 @@
         const downloadCheckbox = document.getElementById('downloadCheckbox');
         let autoFilledCitation = { value: '', sourceKey: '' };
         const FALLBACK_CITATION = 'Citation needed';
+        const FRONT_MATTER_PAGE_LIMIT = 12;
 
         function showCitationNote(message, type = '') {
             const note = document.getElementById('citationSuggestionNote');
@@ -417,7 +418,7 @@
             let frontMatterCitation = '';
 
             try {
-                const lines = await extractFrontMatterLines(pdf, 8);
+                const lines = await extractFrontMatterLines(pdf, FRONT_MATTER_PAGE_LIMIT);
                 frontMatterCitation = buildCitationSuggestion(lines);
             } catch (error) {
                 console.warn('Could not read PDF front matter:', error);
