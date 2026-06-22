@@ -53,6 +53,42 @@
             min-height: 60px;
         }
 
+        .metadata-field {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+
+        .metadata-label-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .metadata-label-row label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .metadata-copy-btn {
+            background: white;
+            border: 1px solid #ccc;
+            color: #333;
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .metadata-copy-btn:hover {
+            background: #eee;
+        }
+
         .input-hint {
             font-size: 12px;
             color: #888;
@@ -254,8 +290,28 @@
         <input type="text" id="dropboxLink" placeholder="https://www.dropbox.com/..." autofocus>
         <div class="input-error" id="linkError">Please enter a valid Dropbox link.</div>
 
-        <textarea id="citation" placeholder="Leave blank to fill from the PDF, or type your own Chicago-style citation"></textarea>
-        <div class="input-hint">Optional: Add citation for accordion-style output (HTML like &lt;em&gt; allowed)</div>
+        <div class="metadata-field">
+            <div class="metadata-label-row">
+                <label for="citation">Chicago Bibliography Entry</label>
+                <button type="button" class="metadata-copy-btn" onclick="copyFieldToClipboard('citation', this)">Copy</button>
+            </div>
+            <textarea id="citation" placeholder="Leave blank to fill from the PDF, or type your own Chicago-style citation"></textarea>
+        </div>
+        <div class="metadata-field">
+            <div class="metadata-label-row">
+                <label for="footnoteCitation">Chicago Footnote Style</label>
+                <button type="button" class="metadata-copy-btn" onclick="copyFieldToClipboard('footnoteCitation', this)">Copy</button>
+            </div>
+            <textarea id="footnoteCitation" placeholder="Auto-filled from the bibliography line"></textarea>
+        </div>
+        <div class="metadata-field">
+            <div class="metadata-label-row">
+                <label for="shortCitation">Short Display Line</label>
+                <button type="button" class="metadata-copy-btn" onclick="copyFieldToClipboard('shortCitation', this)">Copy</button>
+            </div>
+            <textarea id="shortCitation" placeholder="Auto-filled from the bibliography line"></textarea>
+        </div>
+        <div class="input-hint">Only the bibliography entry is used in the generated HTML. The other lines are for copy/paste.</div>
         <div id="citationSuggestionNote" class="field-note"></div>
 
         <!-- Restriction Controls -->
@@ -318,6 +374,7 @@
         async function fillCitationFromPdfIfNeeded(pdfUrl) {
             const citationInput = document.getElementById('citation');
             if (citationInput.value.trim()) {
+                fillDerivedCitationFields(citationInput.value.trim());
                 showCitationNote('');
                 return citationInput.value.trim();
             }
@@ -332,6 +389,7 @@
             }
 
             citationInput.value = citation;
+            fillDerivedCitationFields(citation);
             showCitationNote('Citation filled from PDF. Please review it before copying.', 'success');
             return citation;
         }
@@ -584,6 +642,115 @@
                 .trim();
         }
 
+        function fillDerivedCitationFields(bibliography) {
+            const footnoteInput = document.getElementById('footnoteCitation');
+            const shortInput = document.getElementById('shortCitation');
+            const variants = buildCitationVariantsFromBibliography(bibliography);
+
+            if (!footnoteInput.value.trim() && variants.footnote) {
+                footnoteInput.value = variants.footnote;
+            }
+
+            if (!shortInput.value.trim() && variants.short) {
+                shortInput.value = variants.short;
+            }
+        }
+
+        function buildCitationVariantsFromBibliography(bibliography) {
+            const parts = parseBibliographyCitation(bibliography);
+            if (!parts.titleHtml && !parts.authorText) {
+                return { footnote: bibliography, short: bibliography };
+            }
+
+            const footnoteAuthors = bibliographyAuthorsToFootnote(parts.authorText);
+            const shortAuthors = trimTerminalPunctuation(parts.authorText);
+            const titleHtml = parts.titleHtml || escapeHtml(parts.titleText || '');
+            const footnote = [
+                footnoteAuthors,
+                titleHtml + (parts.publication ? ' (' + escapeHtml(parts.publication) + ')' : '')
+            ].filter(Boolean).join(', ') + '.';
+            const short = [shortAuthors, titleHtml].filter(Boolean).join(', ');
+
+            return {
+                footnote: cleanCitationText(footnote),
+                short: cleanCitationText(short)
+            };
+        }
+
+        function parseBibliographyCitation(bibliography) {
+            const source = cleanCitationText(bibliography);
+            const emMatch = source.match(/<em>([\s\S]+?)<\/em>/i);
+            let authorText = '';
+            let titleHtml = '';
+            let titleText = '';
+            let publication = '';
+
+            if (emMatch) {
+                authorText = trimTerminalPunctuation(source.slice(0, emMatch.index));
+                titleText = cleanFrontMatterLine(stripHtml(emMatch[1]));
+                titleHtml = '<em>' + escapeHtml(titleText) + '</em>';
+                publication = source.slice(emMatch.index + emMatch[0].length)
+                    .replace(/^\s*[.,]\s*/, '');
+            } else {
+                const pieces = source.split(/\.\s+/);
+                authorText = trimTerminalPunctuation(pieces.shift() || '');
+                titleText = trimTerminalPunctuation(pieces.shift() || '');
+                titleHtml = titleText ? '<em>' + escapeHtml(titleText) + '</em>' : '';
+                publication = pieces.join('. ');
+            }
+
+            return {
+                authorText,
+                titleHtml,
+                titleText,
+                publication: trimTerminalPunctuation(stripHtml(publication))
+            };
+        }
+
+        function bibliographyAuthorsToFootnote(authorText) {
+            const authors = splitBibliographyAuthors(authorText);
+            const normalNames = authors
+                .map((author, index) => {
+                    const cleaned = trimTerminalPunctuation(author);
+                    if (index === 0 || cleaned.includes(',')) {
+                        return invertBibliographyName(cleaned);
+                    }
+                    return cleaned;
+                })
+                .filter(Boolean);
+
+            if (normalNames.length <= 1) return normalNames[0] || '';
+            if (normalNames.length === 2) return normalNames[0] + ' and ' + normalNames[1];
+            return normalNames.slice(0, -1).join(', ') + ', and ' + normalNames[normalNames.length - 1];
+        }
+
+        function splitBibliographyAuthors(authorText) {
+            const cleaned = trimTerminalPunctuation(authorText);
+            if (!cleaned) return [];
+
+            const andMatch = cleaned.match(/^(.*?),?\s+and\s+(.+)$/i);
+            if (andMatch) {
+                return [andMatch[1], andMatch[2]];
+            }
+
+            return [cleaned];
+        }
+
+        function invertBibliographyName(name) {
+            const cleaned = trimTerminalPunctuation(name);
+            if (!cleaned.includes(',')) return cleaned;
+
+            const [last, ...rest] = cleaned.split(',');
+            const given = rest.join(',').trim();
+            return [given, last.trim()].filter(Boolean).join(' ');
+        }
+
+        function stripHtml(text) {
+            const div = document.createElement('div');
+            div.innerHTML = String(text || '');
+            return div.textContent || '';
+        }
+
         function formatChicagoAuthors(author) {
             const cleaned = cleanAuthorLine(author);
             if (!cleaned) return '';
@@ -827,6 +994,8 @@
         function clearForm() {
             document.getElementById('dropboxLink').value = '';
             document.getElementById('citation').value = '';
+            document.getElementById('footnoteCitation').value = '';
+            document.getElementById('shortCitation').value = '';
             document.getElementById('linkError').style.display = 'none';
             showCitationNote('');
             document.getElementById('results').style.display = 'none';
@@ -837,9 +1006,17 @@
         }
 
         // --- Copy Functionality ---
+        function copyFieldToClipboard(fieldId, btnElement) {
+            const field = document.getElementById(fieldId);
+            copyTextToClipboard(field.value, btnElement);
+        }
+
         function copyToClipboard(elementId, btnElement) {
             const textToCopy = document.getElementById(elementId).textContent;
+            copyTextToClipboard(textToCopy, btnElement);
+        }
 
+        function copyTextToClipboard(textToCopy, btnElement) {
             navigator.clipboard.writeText(textToCopy).then(() => {
                 const originalText = btnElement.textContent;
                 btnElement.textContent = "Copied!";
@@ -859,6 +1036,12 @@
         }
 
         // --- Enter key to generate ---
+        document.getElementById('citation').addEventListener('change', function() {
+            if (this.value.trim()) {
+                fillDerivedCitationFields(this.value.trim());
+            }
+        });
+
         document.getElementById('dropboxLink').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 generateLink();
