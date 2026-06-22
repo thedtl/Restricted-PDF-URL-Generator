@@ -1588,11 +1588,29 @@
         }
 
         function formatCitationTitle(title) {
-            const cleaned = trimTerminalPunctuation(title);
+            const cleaned = mergeSplitNonLatinTitleTranslations(trimTerminalPunctuation(title));
             return cleanCitationText(cleaned.replace(/\b[\p{Lu}][\p{Lu}'’-]{2,}\b/gu, word => {
                 if (/^(II|III|IV|IX|VI|VII|VIII|USA|UK|US|PDF|ISBN)$/u.test(word)) return word;
                 return word.charAt(0).toLocaleUpperCase('en') + word.slice(1).toLocaleLowerCase('en');
             }));
+        }
+
+        function mergeSplitNonLatinTitleTranslations(text) {
+            const cleaned = cleanCitationText(text);
+            const match = cleaned.match(/^(.+?)\s*\[([^\[\]]+)\]\s*:\s*(.+?)\s*\[([^\[\]]+)\]$/u);
+            if (!match) {
+                return cleaned;
+            }
+
+            const [, sourceMain, translationMain, sourceSubtitle, translationSubtitle] = match;
+            if (!containsNonLatinScript(`${sourceMain} ${sourceSubtitle}`)) {
+                return cleaned;
+            }
+            if (containsNonLatinScript(translationMain) || containsNonLatinScript(translationSubtitle)) {
+                return cleaned;
+            }
+
+            return cleanCitationText(`${sourceMain}: ${sourceSubtitle} [${translationMain}: ${translationSubtitle}]`);
         }
 
         // --- Generate Link ---
