@@ -831,7 +831,8 @@
                 footnoteAuthors,
                 titleText + (parts.publication ? ' (' + parts.publication + ')' : '')
             ].filter(Boolean).join(', ') + '.';
-            const short = [footnoteAuthors, titleText].filter(Boolean).join(', ');
+            const shortResponsibility = formatShortResponsibilityContributor(parts.publication);
+            const short = [footnoteAuthors, titleText, shortResponsibility].filter(Boolean).join(', ');
 
             return {
                 footnote: cleanCitationText(footnote),
@@ -863,6 +864,35 @@
                 titleText,
                 publication: trimTerminalPunctuation(plainCitationText(publication))
             };
+        }
+
+        function formatShortResponsibilityContributor(publication) {
+            const statement = findResponsibilityStatement(publication);
+            if (!statement) return '';
+
+            const contributor = extractResponsibilityContributor(statement);
+            if (!contributor) return '';
+
+            if (/\b(translated|translation|traduction|traduit)\b/i.test(statement)) {
+                return 'trans. ' + contributor;
+            }
+
+            return contributor;
+        }
+
+        function findResponsibilityStatement(text) {
+            return plainCitationText(text)
+                .split(/\.\s+/)
+                .map(sentence => trimTerminalPunctuation(sentence))
+                .find(sentence => looksLikeResponsibilityRoleLine(sentence) && /\b(by|par)\b/i.test(sentence)) || '';
+        }
+
+        function extractResponsibilityContributor(statement) {
+            const match = cleanCitationText(statement).match(/\b(?:by|par)\b\s+(.+)$/i);
+            if (!match) return '';
+
+            const name = normalizeContributorName(match[1]);
+            return looksLikeContributorName(name) ? name : '';
         }
 
         function bibliographyAuthorsToFootnote(authorText) {
