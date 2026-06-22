@@ -916,7 +916,7 @@
 
         function normalizeContributorName(text) {
             return cleanCitationText(stripHtml(text))
-                .replace(/[.,;:]+$/g, '')
+                .replace(/[,;:]+$/g, '')
                 .replace(/\b[\p{L}'’-]+\b/gu, word => (
                     word.length > 1 && word === word.toLocaleUpperCase('fr')
                         ? word.charAt(0).toLocaleUpperCase('fr') + word.slice(1).toLocaleLowerCase('fr')
@@ -1079,8 +1079,8 @@
                 footnoteAuthors,
                 titleAndImprint
             ].filter(Boolean).join(', ') + '.';
-            const shortResponsibility = formatShortResponsibilityContributor(parts.publication);
-            const short = [footnoteAuthors, titleText, shortResponsibility].filter(Boolean).join(', ');
+            const shortAuthors = trimTerminalPunctuation(formatChicagoAuthors(parts.authorText));
+            const short = [shortAuthors, titleText].filter(Boolean).join('. ');
 
             return {
                 footnote: cleanCitationText(footnote),
@@ -1101,7 +1101,7 @@
                 publication = source.slice(emMatch.index + emMatch[0].length)
                     .replace(/^\s*[.,]\s*/, '');
             } else {
-                const pieces = plainCitationText(source).split(/\.\s+/);
+                const pieces = splitCitationSentences(source);
                 authorText = trimTerminalPunctuation(pieces.shift() || '');
                 titleText = trimTerminalPunctuation(pieces.shift() || '');
                 publication = pieces.join('. ');
@@ -1135,10 +1135,35 @@
         }
 
         function splitCitationSentences(text) {
-            return plainCitationText(text)
-                .split(/\.\s+/)
+            const source = plainCitationText(text);
+            const sentences = [];
+            let start = 0;
+
+            for (let index = 0; index < source.length; index++) {
+                if (source[index] !== '.' || !/\s/.test(source[index + 1] || '')) continue;
+
+                const sentence = source.slice(start, index + 1).trim();
+                if (isNonterminalCitationAbbreviation(sentence)) continue;
+
+                sentences.push(sentence);
+                start = index + 1;
+            }
+
+            const tail = source.slice(start).trim();
+            if (tail) sentences.push(tail);
+
+            return sentences
                 .map(sentence => trimTerminalPunctuation(sentence))
                 .filter(Boolean);
+        }
+
+        function isNonterminalCitationAbbreviation(sentence) {
+            const match = sentence.match(/([\p{L}]+)\.$/u);
+            if (!match) return false;
+
+            const token = match[1];
+            return /^[A-Z]$/.test(token) ||
+                /^(inc|co|corp|ltd|jr|sr|st|vol|no)$/i.test(token);
         }
 
         function looksLikePublicationImprint(text) {
