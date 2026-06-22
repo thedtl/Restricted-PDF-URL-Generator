@@ -942,6 +942,7 @@
 
         function normalizePublisherName(text) {
             const cleaned = stripNonTitleLatinBracketedEquivalents(cleanFrontMatterLine(text))
+                .replace(/^(?:발행처|출판사|펴낸곳|펴낸 곳|출판|발행)\s*[:：]?\s*/u, '')
                 .replace(/\s+site internet\b.*$/i, '')
                 .replace(/\s+www\..*$/i, '')
                 .replace(/\s+all rights reserved.*$/i, '')
@@ -1178,6 +1179,8 @@
         function cleanFrontMatterLine(text) {
             return String(text || '')
                 .replace(/\s+/g, ' ')
+                .replace(/\s*\((?:p(?:age)?\.?\s*)?\d+\)\s*(?=[,.;:]|$)/ig, '')
+                .replace(/\s*\[\s*(?:p(?:age)?\.?\s*)?\d+\s*\]\s*(?=[,.;:]|$)/ig, '')
                 .replace(/\s+([,.;:])/g, '$1')
                 .replace(/([(["'])\s+/g, '$1')
                 .replace(/\s+([)\]"'])/g, '$1')
@@ -1188,6 +1191,7 @@
             return stripNameCredentials(repairSplitInitialSurname(cleanFrontMatterLine(text)
                 .replace(/^by\s+/i, '')
                 .replace(/^author\s*:\s*/i, '')
+                .replace(/^(?:지은이|저자|글쓴이|옮긴이|역자|번역)\s*[:：]?\s*/u, '')
                 .replace(/\s+(?:지음|저|著)\s*$/u, '')))
                 .trim();
         }
@@ -1278,6 +1282,7 @@
 
         function normalizeBibliographyPublication(publication) {
             let cleaned = stripNonTitleLatinBracketedEquivalents(trimTerminalPunctuation(publication));
+            cleaned = cleanCitationText(cleaned.replace(/(:\s*)(?:발행처|출판사|펴낸곳|펴낸 곳|출판|발행)\s*[:：]?\s*/u, '$1'));
             return trimTerminalPunctuation(cleaned);
         }
 
