@@ -827,9 +827,15 @@
 
             const footnoteAuthors = bibliographyAuthorsToFootnote(parts.authorText);
             const titleText = trimTerminalPunctuation(parts.titleText || '');
+            const footnotePublication = splitFootnotePublicationDetails(parts.publication);
+            const titleAndDetails = [
+                titleText,
+                footnotePublication.details
+            ].filter(Boolean).join(', ');
+            const titleAndImprint = titleAndDetails + (footnotePublication.imprint ? ' (' + footnotePublication.imprint + ')' : '');
             const footnote = [
                 footnoteAuthors,
-                titleText + (parts.publication ? ' (' + parts.publication + ')' : '')
+                titleAndImprint
             ].filter(Boolean).join(', ') + '.';
             const shortResponsibility = formatShortResponsibilityContributor(parts.publication);
             const short = [footnoteAuthors, titleText, shortResponsibility].filter(Boolean).join(', ');
@@ -866,6 +872,39 @@
             };
         }
 
+        function splitFootnotePublicationDetails(publication) {
+            const sentences = splitCitationSentences(publication);
+            if (sentences.length === 0) {
+                return { details: '', imprint: '' };
+            }
+
+            const last = sentences[sentences.length - 1];
+            if (looksLikePublicationImprint(last)) {
+                return {
+                    details: sentences.slice(0, -1).join(', '),
+                    imprint: last
+                };
+            }
+
+            return {
+                details: sentences.join(', '),
+                imprint: ''
+            };
+        }
+
+        function splitCitationSentences(text) {
+            return plainCitationText(text)
+                .split(/\.\s+/)
+                .map(sentence => trimTerminalPunctuation(sentence))
+                .filter(Boolean);
+        }
+
+        function looksLikePublicationImprint(text) {
+            const cleaned = cleanCitationText(text);
+            return /\b(1[5-9]\d{2}|20\d{2})\b/.test(cleaned) &&
+                (/:/.test(cleaned) || /\b(press|publisher|publishers|publishing|university|college|éditions?|editiones|cerf|oxford|cambridge|paris|new york|london|chicago|boston|leiden|brill)\b/i.test(cleaned));
+        }
+
         function formatShortResponsibilityContributor(publication) {
             const statement = findResponsibilityStatement(publication);
             if (!statement) return '';
@@ -881,9 +920,7 @@
         }
 
         function findResponsibilityStatement(text) {
-            return plainCitationText(text)
-                .split(/\.\s+/)
-                .map(sentence => trimTerminalPunctuation(sentence))
+            return splitCitationSentences(text)
                 .find(sentence => looksLikeResponsibilityRoleLine(sentence) && /\b(by|par)\b/i.test(sentence)) || '';
         }
 
