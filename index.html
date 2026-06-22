@@ -962,6 +962,8 @@
         }
 
         function buildPublicationBlock(city, publisher, year) {
+            if (city && publisher && year) return `${city}: ${publisher}, ${year}`;
+            if (city && publisher) return `${city}: ${publisher}`;
             if (publisher && year) return `${publisher}, ${year}`;
             return publisher || year || city || '';
         }
@@ -1276,8 +1278,6 @@
 
         function normalizeBibliographyPublication(publication) {
             let cleaned = stripNonTitleLatinBracketedEquivalents(trimTerminalPunctuation(publication));
-            cleaned = cleanCitationText(cleaned.replace(/^[^.;:]+:\s*(?=.+(?:,\s*\d{4})?$)/u, ''));
-            cleaned = cleanCitationText(cleaned.replace(/(^|\.\s+)[^.;:]+:\s*(?=[^.;:]+(?:,\s*\d{4})?(?:\.|$))/u, '$1'));
             return trimTerminalPunctuation(cleaned);
         }
 
