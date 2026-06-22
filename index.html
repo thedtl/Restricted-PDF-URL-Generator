@@ -366,6 +366,7 @@
         let autoFilledCitation = { value: '', sourceKey: '' };
         const FALLBACK_CITATION = 'Citation needed';
         const FRONT_MATTER_PAGE_LIMIT = 12;
+        const BACK_MATTER_PAGE_LIMIT = 6;
         const NAME_CREDENTIAL_PATTERN = String.raw`(?:o\.?\s*f\.?\s*m\.?(?:\s*cap\.?)?|ofm\s*cap\.?|ofmcap|ofin\s*cap\.?|ofincap|s\.?\s*j\.?|o\.?\s*p\.?|o\.?\s*s\.?\s*b\.?|o\.?\s*c\.?\s*s\.?\s*o\.?|c\.?\s*s\.?\s*r\.?|s\.?\s*d\.?\s*b\.?|c\.?\s*s\.?\s*c\.?|ph\.?\s*d\.?|d\.?\s*phil\.?|m\.?\s*div\.?|th\.?\s*d\.?|d\.?\s*min\.?|ed\.?\s*d\.?|psy\.?\s*d\.?|s\.?\s*t\.?\s*d\.?|s\.?\s*t\.?\s*l\.?|j\.?\s*c\.?\s*d\.?|j\.?\s*d\.?|m\.?\s*d\.?|d\.?\s*d\.?|m\.?\s*s\.?\s*w\.?|l\.?\s*c\.?\s*s\.?\s*w\.?|l\.?\s*m\.?\s*s\.?\s*w\.?|m\.?\s*b\.?\s*a\.?|r\.?\s*n\.?|m\.\s*a\.|b\.\s*a\.|m\.\s*s\.|b\.\s*s\.)`;
         const COMMA_NAME_CREDENTIAL_PATTERN = String.raw`(?:${NAME_CREDENTIAL_PATTERN}|m\s*a|b\s*a|m\s*s|b\s*s)`;
 
@@ -391,7 +392,7 @@
                 return citation;
             }
 
-            showCitationNote('Reading the first pages and filling the citation...');
+            showCitationNote('Reading the first and final pages and filling the citation...');
 
             const pdf = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
             const citation = await buildCitationFromPdf(pdf);
@@ -420,7 +421,8 @@
             let frontMatterCitation = '';
 
             try {
-                const lines = await extractFrontMatterLines(pdf, FRONT_MATTER_PAGE_LIMIT);
+                const citationPages = getCitationPageNumbers(pdf, FRONT_MATTER_PAGE_LIMIT, BACK_MATTER_PAGE_LIMIT);
+                const lines = await extractFrontMatterLines(pdf, citationPages);
                 frontMatterCitation = buildCitationSuggestion(lines);
             } catch (error) {
                 console.warn('Could not read PDF front matter:', error);
@@ -458,11 +460,25 @@
             }
         }
 
-        async function extractFrontMatterLines(pdf, maxPages) {
-            const pageLimit = Math.min(pdf.numPages, maxPages);
+        function getCitationPageNumbers(pdf, frontPages, backPages) {
+            const pages = new Set();
+            const frontLimit = Math.min(pdf.numPages, frontPages);
+            for (let pageNumber = 1; pageNumber <= frontLimit; pageNumber++) {
+                pages.add(pageNumber);
+            }
+
+            const backStart = Math.max(frontLimit + 1, pdf.numPages - backPages + 1);
+            for (let pageNumber = backStart; pageNumber <= pdf.numPages; pageNumber++) {
+                pages.add(pageNumber);
+            }
+
+            return [...pages].sort((a, b) => a - b);
+        }
+
+        async function extractFrontMatterLines(pdf, pageNumbers) {
             const lines = [];
 
-            for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber++) {
+            for (const pageNumber of pageNumbers) {
                 const page = await pdf.getPage(pageNumber);
                 const content = await page.getTextContent();
                 lines.push(...groupTextItemsIntoLines(content.items, pageNumber));
