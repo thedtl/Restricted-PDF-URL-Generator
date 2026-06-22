@@ -375,9 +375,11 @@
         async function fillCitationFromPdfIfNeeded(pdfUrl) {
             const citationInput = document.getElementById('citation');
             if (citationInput.value.trim()) {
-                fillDerivedCitationFields(citationInput.value.trim());
+                const citation = plainCitationText(citationInput.value.trim());
+                citationInput.value = citation;
+                fillDerivedCitationFields(citation);
                 showCitationNote('');
-                return citationInput.value.trim();
+                return citation;
             }
 
             showCitationNote('Reading the first pages and filling the citation...');
@@ -389,10 +391,11 @@
                 throw new Error('No clear citation was found. Please type the citation manually, then generate again.');
             }
 
-            citationInput.value = citation;
-            fillDerivedCitationFields(citation);
+            const plainCitation = plainCitationText(citation);
+            citationInput.value = plainCitation;
+            fillDerivedCitationFields(plainCitation);
             showCitationNote('Citation filled from PDF. Please review it before copying.', 'success');
-            return citation;
+            return plainCitation;
         }
 
         async function buildCitationFromPdf(pdf) {
@@ -501,7 +504,7 @@
                 return formatChicagoCitation('', title.text);
             }
 
-            return escapeHtml(cleanCitationText(candidates[0].text));
+            return plainCitationText(candidates[0].text);
         }
 
         function chooseTitleLine(candidates) {
@@ -591,6 +594,10 @@
                 .trim();
         }
 
+        function plainCitationText(text) {
+            return cleanCitationText(stripHtml(text));
+        }
+
         function isMostlyAllCaps(text) {
             const letters = text.replace(/[^A-Za-z]/g, '');
             if (letters.length < 4) return false;
@@ -634,13 +641,14 @@
 
         function formatChicagoCitation(author, title, year = '') {
             const authorPart = formatChicagoAuthors(author);
-            const titlePart = title ? '<em>' + escapeHtml(trimTerminalPunctuation(title)) + '</em>.' : '';
-            const yearPart = year ? escapeHtml(year) + '.' : '';
+            const titlePart = title ? trimTerminalPunctuation(title) + '.' : '';
+            const yearPart = year ? year + '.' : '';
 
-            return [authorPart ? escapeHtml(authorPart) : '', titlePart, yearPart]
+            return [authorPart, titlePart, yearPart]
                 .filter(Boolean)
                 .join(' ')
-                .trim();
+                .trim()
+                .replace(/\s+/g, ' ');
         }
 
         function fillDerivedCitationFields(bibliography) {
@@ -663,18 +671,19 @@
             }
 
             const parts = parseBibliographyCitation(bibliography);
-            if (!parts.titleHtml && !parts.authorText) {
-                return { footnote: bibliography, short: bibliography };
+            if (!parts.titleText && !parts.authorText) {
+                const plainBibliography = plainCitationText(bibliography);
+                return { footnote: plainBibliography, short: plainBibliography };
             }
 
             const footnoteAuthors = bibliographyAuthorsToFootnote(parts.authorText);
             const shortAuthors = trimTerminalPunctuation(parts.authorText);
-            const titleHtml = parts.titleHtml || escapeHtml(parts.titleText || '');
+            const titleText = trimTerminalPunctuation(parts.titleText || '');
             const footnote = [
                 footnoteAuthors,
-                titleHtml + (parts.publication ? ' (' + escapeHtml(parts.publication) + ')' : '')
+                titleText + (parts.publication ? ' (' + parts.publication + ')' : '')
             ].filter(Boolean).join(', ') + '.';
-            const short = [shortAuthors, titleHtml].filter(Boolean).join(', ');
+            const short = [shortAuthors, titleText].filter(Boolean).join(', ');
 
             return {
                 footnote: cleanCitationText(footnote),
@@ -686,29 +695,25 @@
             const source = cleanCitationText(bibliography);
             const emMatch = source.match(/<em>([\s\S]+?)<\/em>/i);
             let authorText = '';
-            let titleHtml = '';
             let titleText = '';
             let publication = '';
 
             if (emMatch) {
-                authorText = trimTerminalPunctuation(source.slice(0, emMatch.index));
-                titleText = cleanFrontMatterLine(stripHtml(emMatch[1]));
-                titleHtml = '<em>' + escapeHtml(titleText) + '</em>';
+                authorText = trimTerminalPunctuation(plainCitationText(source.slice(0, emMatch.index)));
+                titleText = plainCitationText(emMatch[1]);
                 publication = source.slice(emMatch.index + emMatch[0].length)
                     .replace(/^\s*[.,]\s*/, '');
             } else {
-                const pieces = source.split(/\.\s+/);
+                const pieces = plainCitationText(source).split(/\.\s+/);
                 authorText = trimTerminalPunctuation(pieces.shift() || '');
                 titleText = trimTerminalPunctuation(pieces.shift() || '');
-                titleHtml = titleText ? '<em>' + escapeHtml(titleText) + '</em>' : '';
                 publication = pieces.join('. ');
             }
 
             return {
                 authorText,
-                titleHtml,
                 titleText,
-                publication: trimTerminalPunctuation(stripHtml(publication))
+                publication: trimTerminalPunctuation(plainCitationText(publication))
             };
         }
 
@@ -754,6 +759,12 @@
             const div = document.createElement('div');
             div.innerHTML = String(text || '');
             return div.textContent || '';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = String(text || '');
+            return div.innerHTML;
         }
 
         function formatChicagoAuthors(author) {
@@ -873,6 +884,7 @@
 
             // Generate button text based on download setting
             const buttonText = allowDownload ? 'Open PDF' : 'Open PDF (View Only)';
+            const citationHtml = escapeHtml(plainCitationText(citation));
 
             // Create the standard HTML embed code
             const embedHtml = `<!-- Mobile Friendly Link -->
@@ -967,7 +979,7 @@
   <div class="dtl_book_header" tabindex="0"
     onclick="(function(el){var a=el.parentElement,t=el.querySelector('.dtl_toggle_text');a.classList.toggle('dtl_open');t.textContent=a.classList.contains('dtl_open')?'Collapse':'Click to See Preview';})(this)"
     onkeydown="if(event.key==='Enter'){this.click()}">
-    <div class="dtl_citation">${citation}</div>
+    <div class="dtl_citation">${citationHtml}</div>
     <span class="dtl_toggle_text">Click to See Preview</span>
   </div>
 
@@ -1042,7 +1054,9 @@
         // --- Enter key to generate ---
         document.getElementById('citation').addEventListener('change', function() {
             if (this.value.trim()) {
-                fillDerivedCitationFields(this.value.trim());
+                const citation = plainCitationText(this.value.trim());
+                this.value = citation;
+                fillDerivedCitationFields(citation);
             }
         });
 
