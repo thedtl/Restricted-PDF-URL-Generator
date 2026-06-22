@@ -363,6 +363,7 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
         const downloadCheckbox = document.getElementById('downloadCheckbox');
+        const FALLBACK_CITATION = 'Citation needed';
 
         function showCitationNote(message, type = '') {
             const note = document.getElementById('citationSuggestionNote');
@@ -657,6 +658,10 @@
         }
 
         function buildCitationVariantsFromBibliography(bibliography) {
+            if (bibliography === FALLBACK_CITATION) {
+                return { footnote: FALLBACK_CITATION, short: FALLBACK_CITATION };
+            }
+
             const parts = parseBibliographyCitation(bibliography);
             if (!parts.titleHtml && !parts.authorText) {
                 return { footnote: bibliography, short: bibliography };
@@ -849,12 +854,11 @@
                 citation = await fillCitationFromPdfIfNeeded(workerWithFile);
             } catch (error) {
                 console.error('Citation extraction error:', error);
-                errorEl.textContent = error.message || 'Could not fill the citation from this PDF.';
-                errorEl.style.display = 'block';
-                showCitationNote('Type the citation manually, then generate again.', 'error');
-                generateButton.disabled = false;
-                generateButton.textContent = originalButtonText;
-                return;
+                citation = document.getElementById('citation').value.trim() || FALLBACK_CITATION;
+                if (citation !== FALLBACK_CITATION) {
+                    fillDerivedCitationFields(citation);
+                }
+                showCitationNote('Could not auto-fill a clear citation. Code generated anyway; edit the metadata lines and generate again if needed.', 'error');
             }
 
             generateButton.textContent = 'Generating...';
