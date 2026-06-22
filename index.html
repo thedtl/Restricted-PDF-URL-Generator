@@ -941,7 +941,7 @@
         }
 
         function normalizePublisherName(text) {
-            const cleaned = cleanFrontMatterLine(text)
+            const cleaned = stripNonTitleLatinBracketedEquivalents(cleanFrontMatterLine(text))
                 .replace(/\s+site internet\b.*$/i, '')
                 .replace(/\s+www\..*$/i, '')
                 .replace(/\s+all rights reserved.*$/i, '')
@@ -962,10 +962,8 @@
         }
 
         function buildPublicationBlock(city, publisher, year) {
-            if (city && publisher && year) return `${city}: ${publisher}, ${year}`;
-            if (city && publisher) return `${city}: ${publisher}`;
             if (publisher && year) return `${publisher}, ${year}`;
-            return publisher || year || '';
+            return publisher || year || city || '';
         }
 
         function scoreTitleCandidate(line, maxFontSize = 0) {
@@ -1051,7 +1049,7 @@
         }
 
         function normalizeResponsibilityStatement(text) {
-            const cleaned = cleanCitationText(stripHtml(text));
+            const cleaned = stripNonTitleLatinBracketedEquivalents(cleanCitationText(stripHtml(text)));
             if (!cleaned) {
                 return '';
             }
@@ -1065,6 +1063,17 @@
             const connector = /^par$/i.test(match[2]) ? 'par' : 'by';
             const name = normalizeContributorName(match[3]);
             return cleanCitationText(`${role} ${connector} ${name}`);
+        }
+
+        function stripNonTitleLatinBracketedEquivalents(text) {
+            const cleaned = cleanCitationText(text);
+            if (!containsNonLatinScript(cleaned)) {
+                return cleaned;
+            }
+
+            return cleanCitationText(cleaned.replace(/\s*\[([^\[\]]+)\]/gu, (match, bracketed) => {
+                return containsNonLatinScript(bracketed) ? match : '';
+            }));
         }
 
         function normalizeAiCitationText(text) {
@@ -1260,9 +1269,16 @@
 
             const authorPart = formatChicagoAuthors(parts.authorText);
             const titlePart = formatCitationTitle(parts.titleText) + '.';
-            const publicationPart = parts.publication ? trimTerminalPunctuation(parts.publication) + '.' : '';
+            const publicationPart = parts.publication ? normalizeBibliographyPublication(parts.publication) + '.' : '';
 
             return cleanCitationText([authorPart, titlePart, publicationPart].filter(Boolean).join(' '));
+        }
+
+        function normalizeBibliographyPublication(publication) {
+            let cleaned = stripNonTitleLatinBracketedEquivalents(trimTerminalPunctuation(publication));
+            cleaned = cleanCitationText(cleaned.replace(/^[^.;:]+:\s*(?=.+(?:,\s*\d{4})?$)/u, ''));
+            cleaned = cleanCitationText(cleaned.replace(/(^|\.\s+)[^.;:]+:\s*(?=[^.;:]+(?:,\s*\d{4})?(?:\.|$))/u, '$1'));
+            return trimTerminalPunctuation(cleaned);
         }
 
         function fillDerivedCitationFields(bibliography) {
