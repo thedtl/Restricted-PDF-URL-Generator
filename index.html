@@ -363,6 +363,7 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
         const downloadCheckbox = document.getElementById('downloadCheckbox');
+        let autoFilledCitation = { value: '', sourceKey: '' };
         const FALLBACK_CITATION = 'Citation needed';
 
         function showCitationNote(message, type = '') {
@@ -374,8 +375,13 @@
 
         async function fillCitationFromPdfIfNeeded(pdfUrl) {
             const citationInput = document.getElementById('citation');
-            if (citationInput.value.trim()) {
-                const citation = normalizeBibliographyCitation(citationInput.value.trim());
+            const existingCitation = citationInput.value.trim();
+            const isExistingAutoFill = existingCitation &&
+                autoFilledCitation.value === existingCitation &&
+                autoFilledCitation.sourceKey === pdfUrl;
+
+            if (existingCitation && !isExistingAutoFill) {
+                const citation = normalizeBibliographyCitation(existingCitation);
                 citationInput.value = citation;
                 fillDerivedCitationFields(citation);
                 showCitationNote('');
@@ -393,9 +399,18 @@
 
             const plainCitation = normalizeBibliographyCitation(citation);
             citationInput.value = plainCitation;
+            markCitationAutoFilled(plainCitation, pdfUrl);
             fillDerivedCitationFields(plainCitation);
             showCitationNote('Citation filled from PDF. Please review it before copying.', 'success');
             return plainCitation;
+        }
+
+        function markCitationAutoFilled(citation, sourceKey) {
+            autoFilledCitation = { value: citation, sourceKey };
+        }
+
+        function clearCitationAutoFillState() {
+            autoFilledCitation = { value: '', sourceKey: '' };
         }
 
         async function buildCitationFromPdf(pdf) {
@@ -1695,6 +1710,7 @@
 
         // --- Clear Form Function ---
         function clearForm() {
+            clearCitationAutoFillState();
             document.getElementById('dropboxLink').value = '';
             document.getElementById('citation').value = '';
             document.getElementById('footnoteCitation').value = '';
@@ -1741,6 +1757,7 @@
         // --- Enter key to generate ---
         document.getElementById('citation').addEventListener('change', function() {
             if (this.value.trim()) {
+                clearCitationAutoFillState();
                 const citation = normalizeBibliographyCitation(this.value.trim());
                 this.value = citation;
                 fillDerivedCitationFields(citation);
