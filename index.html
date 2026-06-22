@@ -1588,7 +1588,9 @@
         }
 
         function formatCitationTitle(title) {
-            const cleaned = mergeSplitNonLatinTitleTranslations(trimTerminalPunctuation(title));
+            const cleaned = moveTrailingNonLatinTitleTranslationIntoBrackets(
+                mergeSplitNonLatinTitleTranslations(trimTerminalPunctuation(title))
+            );
             return cleanCitationText(cleaned.replace(/\b[\p{Lu}][\p{Lu}'’-]{2,}\b/gu, word => {
                 if (/^(II|III|IV|IX|VI|VII|VIII|USA|UK|US|PDF|ISBN)$/u.test(word)) return word;
                 return word.charAt(0).toLocaleUpperCase('en') + word.slice(1).toLocaleLowerCase('en');
@@ -1611,6 +1613,42 @@
             }
 
             return cleanCitationText(`${sourceMain}: ${sourceSubtitle} [${translationMain}: ${translationSubtitle}]`);
+        }
+
+        function moveTrailingNonLatinTitleTranslationIntoBrackets(text) {
+            const cleaned = cleanCitationText(text);
+            const match = cleaned.match(/^(.+?)\s*\[([^\[\]]+)\]\s*:\s*([^\[\]]+)$/u);
+            if (!match) {
+                return cleaned;
+            }
+
+            const [, sourceTitle, bracketedText, trailingTitle] = match;
+            if (!containsNonLatinScript(sourceTitle)) {
+                return cleaned;
+            }
+            if (containsNonLatinScript(bracketedText) || containsNonLatinScript(trailingTitle)) {
+                return cleaned;
+            }
+            if (!looksLikeRomanizedTitle(bracketedText)) {
+                return cleaned;
+            }
+
+            return cleanCitationText(`${sourceTitle} [${trimTerminalPunctuation(trailingTitle)}]`);
+        }
+
+        function looksLikeRomanizedTitle(text) {
+            const cleaned = cleanCitationText(text);
+            if (!cleaned || containsNonLatinScript(cleaned)) {
+                return false;
+            }
+
+            const words = cleaned.split(/\s+/).filter(Boolean);
+            if (words.length < 2) {
+                return false;
+            }
+
+            return words.some(word => /^(?:wa|gwa|ui)$/i.test(word)) ||
+                /\b[a-z]*(?:yeo|yeong|eong|eon|eo|eu|ae|oe|ui|jeok|jido|mokhoe|ganghae|seolgyo)[a-z]*\b/i.test(cleaned);
         }
 
         // --- Generate Link ---
