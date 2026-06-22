@@ -366,6 +366,8 @@
         let autoFilledCitation = { value: '', sourceKey: '' };
         const FALLBACK_CITATION = 'Citation needed';
         const FRONT_MATTER_PAGE_LIMIT = 12;
+        const NAME_CREDENTIAL_PATTERN = String.raw`(?:o\.?\s*f\.?\s*m\.?(?:\s*cap\.?)?|ofm\s*cap\.?|ofmcap|ofin\s*cap\.?|ofincap|s\.?\s*j\.?|o\.?\s*p\.?|o\.?\s*s\.?\s*b\.?|o\.?\s*c\.?\s*s\.?\s*o\.?|c\.?\s*s\.?\s*r\.?|s\.?\s*d\.?\s*b\.?|c\.?\s*s\.?\s*c\.?|ph\.?\s*d\.?|d\.?\s*phil\.?|m\.?\s*div\.?|th\.?\s*d\.?|d\.?\s*min\.?|ed\.?\s*d\.?|psy\.?\s*d\.?|s\.?\s*t\.?\s*d\.?|s\.?\s*t\.?\s*l\.?|j\.?\s*c\.?\s*d\.?|j\.?\s*d\.?|m\.?\s*d\.?|d\.?\s*d\.?|m\.?\s*s\.?\s*w\.?|l\.?\s*c\.?\s*s\.?\s*w\.?|l\.?\s*m\.?\s*s\.?\s*w\.?|m\.?\s*b\.?\s*a\.?|r\.?\s*n\.?|m\.\s*a\.|b\.\s*a\.|m\.\s*s\.|b\.\s*s\.)`;
+        const COMMA_NAME_CREDENTIAL_PATTERN = String.raw`(?:${NAME_CREDENTIAL_PATTERN}|m\s*a|b\s*a|m\s*s|b\s*s)`;
 
         function showCitationNote(message, type = '') {
             const note = document.getElementById('citationSuggestionNote');
@@ -1050,6 +1052,10 @@
 
         function normalizeResponsibilityStatement(text) {
             const cleaned = cleanCitationText(stripHtml(text));
+            if (!cleaned) {
+                return '';
+            }
+
             const match = cleaned.match(/^(.*?)\b(by|par)\b\s+(.+)$/i);
             if (!match) {
                 return sentenceCaseText(cleaned);
@@ -1061,18 +1067,48 @@
             return cleanCitationText(`${role} ${connector} ${name}`);
         }
 
+        function normalizeAiCitationText(text) {
+            return cleanCitationText(text).replace(/\b(by|par)\b\s+([^.;()]*?)(\s*)(?=[.;()]|$)/giu, (_match, connector, names, spacing) => {
+                const normalizedConnector = /^par$/i.test(connector) ? 'par' : 'by';
+                return `${normalizedConnector} ${normalizeContributorName(names)}${spacing}`;
+            });
+        }
+
         function formatResponsibilityRoles(lines) {
             return sentenceCaseText(cleanCitationText(lines.join(', ')));
         }
 
         function normalizeContributorName(text) {
-            return cleanCitationText(stripHtml(text))
+            return stripNameCredentials(text)
                 .replace(/[,;:]+$/g, '')
                 .replace(/\b[\p{L}'’-]+\b/gu, word => (
                     word.length > 1 && word === word.toLocaleUpperCase('fr')
                         ? word.charAt(0).toLocaleUpperCase('fr') + word.slice(1).toLocaleLowerCase('fr')
                         : word
                 ));
+        }
+
+        function stripNameCredentials(text) {
+            let cleaned = cleanCitationText(stripHtml(text))
+                .replace(/^[`'‘’"“”]+/g, '')
+                .replace(new RegExp(`\\s*,\\s*${COMMA_NAME_CREDENTIAL_PATTERN}\\.?\\s*(?=,)`, 'giu'), '')
+                .replace(new RegExp(`\\s+${NAME_CREDENTIAL_PATTERN}\\.?\\s*(?=,)`, 'giu'), '');
+
+            let previous = '';
+            while (cleaned && cleaned !== previous) {
+                previous = cleaned;
+                cleaned = cleaned
+                    .replace(new RegExp(`\\s*,\\s*${COMMA_NAME_CREDENTIAL_PATTERN}\\.?\\s*$`, 'iu'), '')
+                    .replace(new RegExp(`\\s+${NAME_CREDENTIAL_PATTERN}\\.?\\s*$`, 'iu'), '')
+                    .replace(/[,\s]+$/g, '')
+                    .trim();
+            }
+
+            if (new RegExp(`^(?:${COMMA_NAME_CREDENTIAL_PATTERN}|${NAME_CREDENTIAL_PATTERN})\\.?$`, 'iu').test(cleaned)) {
+                return '';
+            }
+
+            return cleaned;
         }
 
         function looksLikeContributorName(text) {
@@ -1108,10 +1144,10 @@
         }
 
         function cleanAuthorLine(text) {
-            return repairSplitInitialSurname(cleanFrontMatterLine(text)
+            return stripNameCredentials(repairSplitInitialSurname(cleanFrontMatterLine(text)
                 .replace(/^by\s+/i, '')
                 .replace(/^author\s*:\s*/i, '')
-                .replace(/\s+(?:지음|저|著)\s*$/u, ''))
+                .replace(/\s+(?:지음|저|著)\s*$/u, '')))
                 .trim();
         }
 
@@ -1188,7 +1224,7 @@
         function normalizeBibliographyCitation(bibliography) {
             if (bibliography === FALLBACK_CITATION) return FALLBACK_CITATION;
 
-            const plainBibliography = plainCitationText(bibliography);
+            const plainBibliography = normalizeAiCitationText(plainCitationText(bibliography));
             const parts = parseBibliographyCitation(plainBibliography);
             if (!parts.titleText || !parts.authorText) return plainBibliography;
 
@@ -1220,7 +1256,7 @@
 
             const parts = parseBibliographyCitation(bibliography);
             if (!parts.titleText && !parts.authorText) {
-                const plainBibliography = plainCitationText(bibliography);
+                const plainBibliography = normalizeAiCitationText(plainCitationText(bibliography));
                 return { footnote: plainBibliography, short: plainBibliography };
             }
 
