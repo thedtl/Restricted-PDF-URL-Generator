@@ -34,7 +34,7 @@
         p { color: #666; margin-bottom: 25px; }
 
         /* --- Inputs & Main Button --- */
-        input[type="text"], textarea {
+        input[type="text"], input[type="password"], textarea {
             width: 100%;
             padding: 14px;
             font-size: 16px;
@@ -46,7 +46,7 @@
             margin-bottom: 15px;
             font-family: 'Inter', sans-serif;
         }
-        input[type="text"]:focus, textarea:focus { border-color: #0061fe; }
+        input[type="text"]:focus, input[type="password"]:focus, textarea:focus { border-color: #0061fe; }
 
         textarea {
             resize: vertical;
@@ -87,6 +87,14 @@
 
         .metadata-copy-btn:hover {
             background: #eee;
+        }
+
+        .password-saved {
+            display: inline-flex;
+            margin-left: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #198754;
         }
 
         .input-hint {
@@ -287,6 +295,13 @@
         <h1>LibGuide PDF Generator</h1>
         <p>Paste your Dropbox link and choose whether downloading is allowed.</p>
 
+        <div class="metadata-field">
+            <div class="metadata-label-row">
+                <label for="staffPassword">Staff Password <span id="passwordSaved" class="password-saved" style="display: none;">Saved</span></label>
+            </div>
+            <input type="password" id="staffPassword" placeholder="Enter staff password">
+        </div>
+
         <input type="text" id="dropboxLink" placeholder="https://www.dropbox.com/..." autofocus>
         <div class="input-error" id="linkError">Please enter a valid Dropbox link.</div>
 
@@ -358,6 +373,7 @@
         // --- YOUR SETTINGS ---
         const VIEWER_URL = "https://thedtl.github.io/Customizable-Reader/web/viewer.html";
         const WORKER_URL = "https://restricteddropboxguard.ccrawford.workers.dev/";
+        const CITATION_WORKER_URL = "https://dtl-chapter-reader-dropbox-lab.reference-dfe.workers.dev";
         // ---------------------
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -367,8 +383,28 @@
         const FALLBACK_CITATION = 'Citation needed';
         const FRONT_MATTER_PAGE_LIMIT = 12;
         const BACK_MATTER_PAGE_LIMIT = 6;
+        const CITATION_IMAGE_RENDER_SCALE = 1.8;
+        const CITATION_IMAGE_JPEG_QUALITY = 0.9;
         const NAME_CREDENTIAL_PATTERN = String.raw`(?:o\.?\s*f\.?\s*m\.?(?:\s*cap\.?)?|ofm\s*cap\.?|ofmcap|ofin\s*cap\.?|ofincap|s\.?\s*j\.?|o\.?\s*p\.?|o\.?\s*s\.?\s*b\.?|o\.?\s*c\.?\s*s\.?\s*o\.?|c\.?\s*s\.?\s*r\.?|s\.?\s*d\.?\s*b\.?|c\.?\s*s\.?\s*c\.?|ph\.?\s*d\.?|d\.?\s*phil\.?|m\.?\s*div\.?|th\.?\s*d\.?|d\.?\s*min\.?|ed\.?\s*d\.?|psy\.?\s*d\.?|s\.?\s*t\.?\s*d\.?|s\.?\s*t\.?\s*l\.?|j\.?\s*c\.?\s*d\.?|j\.?\s*d\.?|m\.?\s*d\.?|d\.?\s*d\.?|m\.?\s*s\.?\s*w\.?|l\.?\s*c\.?\s*s\.?\s*w\.?|l\.?\s*m\.?\s*s\.?\s*w\.?|m\.?\s*b\.?\s*a\.?|r\.?\s*n\.?|m\.\s*a\.|b\.\s*a\.|m\.\s*s\.|b\.\s*s\.)`;
         const COMMA_NAME_CREDENTIAL_PATTERN = String.raw`(?:${NAME_CREDENTIAL_PATTERN}|m\s*a|b\s*a|m\s*s|b\s*s)`;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedPassword = sessionStorage.getItem('dtl_staff_password');
+            if (savedPassword) {
+                document.getElementById('staffPassword').value = savedPassword;
+                document.getElementById('passwordSaved').style.display = 'inline-flex';
+            }
+        });
+
+        document.getElementById('staffPassword').addEventListener('change', function() {
+            if (this.value) {
+                sessionStorage.setItem('dtl_staff_password', this.value);
+                document.getElementById('passwordSaved').style.display = 'inline-flex';
+            } else {
+                sessionStorage.removeItem('dtl_staff_password');
+                document.getElementById('passwordSaved').style.display = 'none';
+            }
+        });
 
         function showCitationNote(message, type = '') {
             const note = document.getElementById('citationSuggestionNote');
@@ -394,8 +430,9 @@
 
             showCitationNote('Reading the first and final pages and filling the citation...');
 
+            const staffPassword = document.getElementById('staffPassword')?.value || '';
             const pdf = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
-            const citation = await buildCitationFromPdf(pdf);
+            const citation = await buildCitationFromPdf(pdf, staffPassword);
 
             if (!citation) {
                 throw new Error('No clear citation was found. Please type the citation manually, then generate again.');
@@ -417,13 +454,55 @@
             autoFilledCitation = { value: '', sourceKey: '' };
         }
 
-        async function buildCitationFromPdf(pdf) {
+        async function requestHeadingSuggestion(staffPassword, lines, images) {
+            if (!staffPassword) {
+                return { heading: '', source: 'fallback', note: 'No staff password was provided.' };
+            }
+
+            try {
+                const response = await fetch(CITATION_WORKER_URL + '/suggest-heading', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        password: staffPassword,
+                        lines,
+                        images
+                    })
+                });
+
+                const data = await response.json();
+                if (!response.ok || data.error) {
+                    throw new Error(data.error || 'Worker heading suggestion failed');
+                }
+
+                return {
+                    heading: String(data.heading || '').trim(),
+                    source: data.source || 'worker',
+                    note: data.note || ''
+                };
+            } catch (error) {
+                console.warn('Worker heading suggestion unavailable; using browser fallback.', error);
+                return { heading: '', source: 'fallback', note: '' };
+            }
+        }
+
+        async function buildCitationFromPdf(pdf, staffPassword = '') {
             let frontMatterCitation = '';
 
             try {
                 const citationPages = getCitationPageNumbers(pdf, FRONT_MATTER_PAGE_LIMIT, BACK_MATTER_PAGE_LIMIT);
                 const lines = await extractFrontMatterLines(pdf, citationPages);
                 frontMatterCitation = buildCitationSuggestion(lines);
+
+                if (staffPassword) {
+                    try {
+                        const images = await renderFrontMatterImages(pdf, citationPages);
+                        const workerSuggestion = await requestHeadingSuggestion(staffPassword, lines, images);
+                        frontMatterCitation = workerSuggestion.heading || frontMatterCitation;
+                    } catch (error) {
+                        console.warn('Could not render PDF front matter for citation vision:', error);
+                    }
+                }
             } catch (error) {
                 console.warn('Could not read PDF front matter:', error);
             }
@@ -485,6 +564,30 @@
             }
 
             return lines;
+        }
+
+        async function renderFrontMatterImages(pdf, pageNumbers) {
+            const images = [];
+
+            for (const pageNumber of pageNumbers) {
+                const page = await pdf.getPage(pageNumber);
+                const viewport = page.getViewport({ scale: CITATION_IMAGE_RENDER_SCALE });
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d', { alpha: false });
+                canvas.width = Math.floor(viewport.width);
+                canvas.height = Math.floor(viewport.height);
+
+                await page.render({ canvasContext: context, viewport }).promise;
+
+                const dataUrl = canvas.toDataURL('image/jpeg', CITATION_IMAGE_JPEG_QUALITY);
+                images.push({
+                    pageNumber,
+                    mimeType: 'image/jpeg',
+                    data: dataUrl.replace(/^data:image\/jpeg;base64,/, '')
+                });
+            }
+
+            return images;
         }
 
         function groupTextItemsIntoLines(items, pageNumber) {
@@ -2218,6 +2321,12 @@
         }
 
         // --- Enter key to generate ---
+        document.getElementById('staffPassword').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                document.getElementById('dropboxLink').focus();
+            }
+        });
+
         document.getElementById('citation').addEventListener('change', function() {
             if (this.value.trim()) {
                 clearCitationAutoFillState();
