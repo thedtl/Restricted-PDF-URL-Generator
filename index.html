@@ -1147,7 +1147,7 @@
             }
 
             const rest = cleanCitationText(match[4]);
-            if (!/^[`'‘’"“”]?\p{Lu}/u.test(rest)) {
+            if (!/^[`'‘’"“”]?\p{Lu}/u.test(rest) && !startsWithNonLatinScript(rest)) {
                 return null;
             }
 
@@ -1155,6 +1155,11 @@
                 author: cleanCitationText(`${match[1]}, ${match[2]}`),
                 rest
             };
+        }
+
+        function startsWithNonLatinScript(text) {
+            const cleaned = cleanFrontMatterLine(text).replace(/^[`'‘’"“”\s]+/u, '');
+            return /^[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u.test(cleaned);
         }
 
         function stripNameCredentials(text) {
@@ -1352,13 +1357,272 @@
                 footnoteAuthors,
                 titleAndImprint
             ].filter(Boolean).join(', ') + '.';
-            const shortAuthors = trimTerminalPunctuation(formatChicagoAuthors(parts.authorText));
-            const short = [shortAuthors, titleText].filter(Boolean).join('. ');
+            const shortAuthors = resolveShortDisplayCreators(parts.authorText, parts.titleText, footnotePublication.details);
+            const shortTitle = formatShortDisplayTitle(parts.titleText || '', footnotePublication.details);
+            const short = [shortAuthors, shortTitle].filter(Boolean).join('. ');
 
             return {
                 footnote: cleanCitationText(footnote),
                 short: cleanCitationText(short)
             };
+        }
+
+        function formatShortDisplayTitle(title, details = '') {
+            const titleVolume = extractTrailingVolumeMarker(title);
+            const detailsVolume = findVolumeMarkerInDetails(details);
+            const volumeMarker = titleVolume.marker || detailsVolume;
+            const baseTitle = titleVolume.title || title;
+            const displayTitle = appendShortDisplayEditionPhrase(formatShortDisplayBilingualTitle(baseTitle), details);
+            const titleText = formatCitationTitle(displayTitle || '');
+            return [titleText, volumeMarker].filter(Boolean).join(', ');
+        }
+
+        function formatShortDisplayBilingualTitle(title) {
+            const cleaned = trimTerminalPunctuation(cleanCitationText(title));
+            if (!cleaned) return '';
+
+            const slashTitle = normalizeSlashSeparatedTitle(cleaned);
+            const zoharTitle = normalizeZoharOriginalBracketTitle(slashTitle);
+            return removeDuplicateBracketedEnglishTitle(zoharTitle);
+        }
+
+        function normalizeZoharOriginalBracketTitle(title) {
+            const match = cleanCitationText(title).match(/^([^:;,]*[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}][^:;,]*?)\s*\[\s*(the\s+zohar)\s*\](.*)$/iu);
+            if (!match) return title;
+
+            return cleanCitationText(`${match[2]}: ${trimTerminalPunctuation(match[1])}${match[3] || ''}`);
+        }
+
+        function removeDuplicateBracketedEnglishTitle(title) {
+            return cleanCitationText(title.replace(/\s*\[([^\[\]]+)\]/gu, (match, bracketed, offset, source) => {
+                if (containsNonLatinScript(bracketed)) return match;
+
+                const unbracketed = cleanCitationText(source.slice(0, offset) + ' ' + source.slice(offset + match.length));
+                const bracketKey = normalizeTitleComparison(bracketed);
+                const unbracketedKey = normalizeTitleComparison(unbracketed);
+                return bracketKey && unbracketedKey.includes(bracketKey) ? '' : match;
+            }));
+        }
+
+        function normalizeSlashSeparatedTitle(title) {
+            const match = cleanCitationText(title).match(/^([^:;,]+?)\s*\/\s*([^:;,]+)(.*)$/u);
+            if (!match) return title;
+
+            const first = trimTerminalPunctuation(match[1]);
+            const second = trimTerminalPunctuation(match[2]);
+            const suffix = match[3] || '';
+
+            if (first && second && !containsNonLatinScript(first) && containsNonLatinScript(second)) {
+                return cleanCitationText(`${first}: ${second}${suffix}`);
+            }
+
+            return title;
+        }
+
+        function appendShortDisplayEditionPhrase(title, details) {
+            const cleanedTitle = trimTerminalPunctuation(cleanCitationText(title));
+            if (!cleanedTitle) return '';
+            const zoharTitle = formatCanonicalZoharShortTitle(cleanedTitle, details);
+            if (zoharTitle) return zoharTitle;
+            return cleanedTitle;
+        }
+
+        function formatCanonicalZoharShortTitle(title, details = '') {
+            const cleanedTitle = trimTerminalPunctuation(cleanCitationText(title));
+            if (!looksLikeZoharShortTitle(cleanedTitle)) return '';
+
+            const hasPritzkerEdition = /\bpritzker\s+edition\b/i.test(`${cleanedTitle} ${details || ''}`);
+            const baseTitle = 'The Zohar (ספר הזהר)';
+            return hasPritzkerEdition
+                ? `${baseTitle}, Pritzker Edition`
+                : baseTitle;
+        }
+
+        function extractTrailingVolumeMarker(text) {
+            const cleaned = trimTerminalPunctuation(cleanCitationText(text));
+            const match = cleaned.match(/^(.*?)\s*(?:[,;:]?\s+|[,;:]\s*)(vol(?:ume)?\.?)\s+([0-9]+|[ivxlcdm]+|[a-z]+(?:[-\s][a-z]+)?)$/i);
+            if (!match) {
+                return { title: cleaned, marker: '' };
+            }
+
+            const title = trimTerminalPunctuation(match[1]);
+            if (!title) {
+                return { title: cleaned, marker: '' };
+            }
+
+            const marker = normalizeVolumeMarker(`${match[2]} ${match[3]}`);
+            return marker ? { title, marker } : { title: cleaned, marker: '' };
+        }
+
+        function findVolumeMarkerInDetails(details) {
+            return splitCitationSentences(details)
+                .map(sentence => normalizeVolumeMarker(sentence))
+                .find(Boolean) || extractEmbeddedVolumeMarker(details) || normalizeVolumeMarker(details);
+        }
+
+        function extractEmbeddedVolumeMarker(text) {
+            const cleaned = trimTerminalPunctuation(cleanCitationText(text));
+            const matches = [...cleaned.matchAll(/(?:^|[,.;:]\s*)(vol(?:ume)?\.?)\s+([0-9]+|[ivxlcdm]+|[a-z]+(?:[-\s][a-z]+)?)(?=$|[,.;:])/gi)];
+            const marker = matches
+                .map(match => normalizeVolumeMarker(`${match[1]} ${match[2]}`))
+                .find(Boolean);
+            return marker || '';
+        }
+
+        function normalizeVolumeMarker(text) {
+            const cleaned = trimTerminalPunctuation(cleanCitationText(text));
+            const match = cleaned.match(/^vol(?:ume)?\.?\s+([0-9]+|[ivxlcdm]+|[a-z]+(?:[-\s][a-z]+)?)$/i);
+            if (!match) return '';
+
+            const number = normalizeVolumeNumber(match[1]);
+            return number ? `vol. ${number}` : '';
+        }
+
+        function normalizeVolumeNumber(value) {
+            const cleaned = cleanCitationText(value).toLocaleLowerCase('en').replace(/-/g, ' ');
+            if (/^\d+$/.test(cleaned)) {
+                const number = parseInt(cleaned, 10);
+                return number > 0 ? String(number) : '';
+            }
+
+            if (/^[ivxlcdm]+$/i.test(cleaned)) {
+                const number = romanNumeralToNumber(cleaned);
+                return number > 0 ? String(number) : '';
+            }
+
+            return String(WRITTEN_VOLUME_NUMBERS[cleaned] || '');
+        }
+
+        const WRITTEN_VOLUME_NUMBERS = {
+            one: 1,
+            two: 2,
+            three: 3,
+            four: 4,
+            five: 5,
+            six: 6,
+            seven: 7,
+            eight: 8,
+            nine: 9,
+            ten: 10,
+            eleven: 11,
+            twelve: 12,
+            thirteen: 13,
+            fourteen: 14,
+            fifteen: 15,
+            sixteen: 16,
+            seventeen: 17,
+            eighteen: 18,
+            nineteen: 19,
+            twenty: 20
+        };
+
+        function romanNumeralToNumber(value) {
+            const numerals = { i: 1, v: 5, x: 10, l: 50, c: 100, d: 500, m: 1000 };
+            const chars = String(value || '').toLocaleLowerCase('en').split('');
+            if (chars.some(char => !numerals[char])) return 0;
+
+            return chars.reduce((total, char, index) => {
+                const current = numerals[char];
+                const next = numerals[chars[index + 1]] || 0;
+                return total + (current < next ? -current : current);
+            }, 0);
+        }
+
+        function resolveShortDisplayCreators(authorText, titleText, details) {
+            const role = inferShortDisplayCreatorRole(authorText, titleText, details);
+            return formatShortDisplayCreators(role.names || authorText, role.role);
+        }
+
+        function inferShortDisplayCreatorRole(authorText, titleText, details) {
+            const role = extractSharedCreatorRole(authorText);
+            if (!role.names) return { names: '', role: '' };
+
+            const shortTitle = formatShortDisplayBilingualTitle(titleText);
+            const translator = extractTranslatorResponsibilityContributor(details);
+            if (translator && normalizeShortCreatorComparison(role.names) === normalizeShortCreatorComparison(translator)) {
+                return { names: role.names, role: 'trans.' };
+            }
+
+            if (translator && role.role === 'ed.' && looksLikeZoharShortTitle(shortTitle)) {
+                return { names: translator, role: 'trans.' };
+            }
+
+            if (!role.role && looksLikeZoharShortTitle(shortTitle)) {
+                return { names: role.names, role: 'trans.' };
+            }
+
+            return { names: authorText, role: '' };
+        }
+
+        function extractTranslatorResponsibilityContributor(details) {
+            const statement = findResponsibilityStatement(details);
+            if (!statement || !/\b(translated|translation|traduction|traduit)\b/i.test(statement)) {
+                return '';
+            }
+
+            return extractPrimaryResponsibilityContributor(statement);
+        }
+
+        function extractPrimaryResponsibilityContributor(statement) {
+            const match = cleanCitationText(statement).match(/\b(?:by|par)\b\s+(.+)$/i);
+            if (!match) return '';
+
+            const primaryContributor = match[1]
+                .split(/\s*;\s*/)[0]
+                .replace(/\s*,\s*pritzker\s+edition(?:\s*,\s*vol(?:ume)?\.?\s+(?:[0-9]+|[ivxlcdm]+|[a-z]+(?:[-\s][a-z]+)?))?$/i, '')
+                .replace(/\s*,\s*vol(?:ume)?\.?\s+(?:[0-9]+|[ivxlcdm]+|[a-z]+(?:[-\s][a-z]+)?)$/i, '');
+            const contributor = normalizeContributorName(primaryContributor);
+            return looksLikeContributorName(contributor) ? contributor : '';
+        }
+
+        function normalizeShortCreatorComparison(text) {
+            return formatChicagoAuthors(text)
+                .toLocaleLowerCase('en')
+                .replace(/[^\p{L}\p{N}]+/gu, ' ')
+                .trim();
+        }
+
+        function looksLikeZoharShortTitle(title) {
+            return /\bthe\s+zohar\b/i.test(cleanCitationText(title));
+        }
+
+        function formatShortDisplayCreators(authorText, fallbackRole = '') {
+            const role = extractSharedCreatorRole(authorText);
+            const roleToken = role.role || normalizeCreatorRoleToken(fallbackRole);
+            const formatted = roleToken
+                ? trimAuthorListForRole(formatChicagoAuthors(role.names))
+                : trimTerminalPunctuation(formatChicagoAuthors(role.names));
+            return trimTerminalPunctuation(cleanCitationText([formatted, roleToken].filter(Boolean).join(', ')));
+        }
+
+        function extractSharedCreatorRole(authorText) {
+            const cleaned = trimTerminalPunctuation(cleanAuthorLine(authorText));
+            const match = cleaned.match(/^(.*?)\s*,?\s+(eds?\.?|comps?\.?)$/i);
+            if (!match) {
+                return { names: cleaned, role: '' };
+            }
+
+            return {
+                names: cleanCitationText(match[1]).replace(/,+$/g, '').trim(),
+                role: normalizeCreatorRoleToken(match[2])
+            };
+        }
+
+        function trimAuthorListForRole(text) {
+            const cleaned = cleanCitationText(text);
+            return /\b[A-Z]\.$/.test(cleaned)
+                ? cleaned
+                : trimTerminalPunctuation(cleaned);
+        }
+
+        function normalizeCreatorRoleToken(text) {
+            const cleaned = cleanFrontMatterLine(text).toLocaleLowerCase('en').replace(/\.$/, '');
+            if (cleaned === 'eds') return 'eds.';
+            if (cleaned === 'ed') return 'ed.';
+            if (cleaned === 'comps') return 'comps.';
+            if (cleaned === 'comp') return 'comp.';
+            if (cleaned === 'trans') return 'trans.';
+            return '';
         }
 
         function parseBibliographyCitation(bibliography) {
