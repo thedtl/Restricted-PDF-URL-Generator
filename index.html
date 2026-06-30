@@ -1867,12 +1867,16 @@
         }
 
         function invertBibliographyName(name) {
-            const cleaned = trimAuthorName(name);
-            if (!cleaned.includes(',')) return cleaned;
+            const role = extractCreatorRoleSuffix(name);
+            const cleaned = trimAuthorName(role.name);
+            if (!cleaned.includes(',')) {
+                return [cleaned, role.role].filter(Boolean).join(', ');
+            }
 
             const [last, ...rest] = cleaned.split(',');
             const given = rest.join(',').trim();
-            return [given, last.trim()].filter(Boolean).join(' ');
+            const inverted = [given, last.trim()].filter(Boolean).join(' ');
+            return [inverted, role.role].filter(Boolean).join(', ');
         }
 
         function stripHtml(text) {
@@ -1911,10 +1915,31 @@
             }
 
             for (; index < pieces.length; index++) {
+                if (isCreatorRoleToken(pieces[index]) && names.length > 0) {
+                    names[names.length - 1] = `${trimAuthorName(names[names.length - 1])}, ${normalizeCreatorRoleToken(pieces[index])}`;
+                    continue;
+                }
                 names.push(pieces[index]);
             }
 
             return names;
+        }
+
+        function extractCreatorRoleSuffix(name) {
+            const cleaned = trimAuthorName(name);
+            const match = cleaned.match(/^(.*?)\s*,?\s+(eds?\.?|comps?\.?|trans\.?)$/i);
+            if (!match) {
+                return { name: cleaned, role: '' };
+            }
+
+            return {
+                name: trimAuthorName(match[1]),
+                role: normalizeCreatorRoleToken(match[2])
+            };
+        }
+
+        function isCreatorRoleToken(text) {
+            return Boolean(normalizeCreatorRoleToken(text));
         }
 
         function looksLikeSingleNonLatinAuthorName(cleaned, pieces) {
