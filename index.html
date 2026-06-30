@@ -1210,12 +1210,57 @@
         }
 
         function normalizeAiCitationText(text) {
-            const cleaned = cleanCitationText(text).replace(/\b(by|par)\b\s+([^.;()]*?)(\s*)(?=[.;()]|$)/giu, (_match, connector, names, spacing) => {
+            const cleaned = normalizeCompoundCreatorRoleText(text).replace(/\b(by|par)\b\s+([^.;()]*?)(\s*)(?=[.;()]|$)/giu, (_match, connector, names, spacing) => {
                 const normalizedConnector = /^par$/i.test(connector) ? 'par' : 'by';
                 return `${normalizedConnector} ${normalizeContributorName(names)}${spacing}`;
             });
 
             return normalizeLeadingInvertedInitialAuthorHeading(cleaned);
+        }
+
+        function normalizeCompoundCreatorRoleText(text) {
+            return normalizeSpelledOutCreatorRoleText(cleanCitationText(text));
+        }
+
+        function normalizeSpelledOutCreatorRoleText(text) {
+            const cleaned = cleanCitationText(text);
+            const firstSentence = splitFirstCitationSentence(cleaned);
+            if (!firstSentence.first) return cleaned;
+
+            const normalizedFirst = normalizeSpelledOutCreatorRoleSuffix(firstSentence.first);
+            if (normalizedFirst === firstSentence.first) return cleaned;
+
+            return cleanCitationText([
+                normalizedFirst + '.',
+                firstSentence.rest
+            ].filter(Boolean).join(' '));
+        }
+
+        function splitFirstCitationSentence(text) {
+            const source = cleanCitationText(text);
+            for (let index = 0; index < source.length; index++) {
+                if (source[index] !== '.' || !/\s/.test(source[index + 1] || '')) continue;
+
+                const sentence = source.slice(0, index + 1).trim();
+                if (isNonterminalCitationAbbreviation(sentence)) continue;
+
+                return {
+                    first: trimTerminalPunctuation(sentence),
+                    rest: source.slice(index + 1).trim()
+                };
+            }
+
+            return {
+                first: trimTerminalPunctuation(source),
+                rest: ''
+            };
+        }
+
+        function normalizeSpelledOutCreatorRoleSuffix(text) {
+            const cleaned = trimTerminalPunctuation(cleanCitationText(text));
+            const rolePhrase = '(?:translators?|commentators?)(?:\\s*,?\\s*(?:and|&)\\s*(?:translators?|commentators?))?';
+            const rolePattern = new RegExp(`,\\s*(${rolePhrase})$`, 'iu');
+            return cleaned.replace(rolePattern, ', trans');
         }
 
         function formatResponsibilityRoles(lines) {
@@ -1423,6 +1468,21 @@
             return trimTerminalPunctuation(cleaned);
         }
 
+        function normalizeFootnoteBookDetails(details) {
+            return splitCitationSentences(details)
+                .map(normalizeFootnoteResponsibilityPhrase)
+                .filter(Boolean)
+                .join(', ');
+        }
+
+        function normalizeFootnoteResponsibilityPhrase(text) {
+            return cleanCitationText(text)
+                .replace(/(^|,\s*)translation(?:\s+and\s+commentary|\s+with\s+[^,.;]+|\s+and\s+with\s+[^,.;]+)?\s+by\s+/gi, '$1trans. ')
+                .replace(/(^|,\s*)translated(?:\s+and\s+edited|\s+with\s+[^,.;]+|\s+and\s+with\s+[^,.;]+)?\s+by\s+/gi, '$1trans. ')
+                .replace(/(^|,\s*)edited(?:\s+with\s+[^,.;]+|\s+and\s+[^,.;]+)?\s+by\s+/gi, '$1ed. ')
+                .replace(/(^|,\s*)compiled(?:\s+with\s+[^,.;]+|\s+and\s+[^,.;]+)?\s+by\s+/gi, '$1comp. ');
+        }
+
         function fillDerivedCitationFields(bibliography) {
             const footnoteInput = document.getElementById('footnoteCitation');
             const shortInput = document.getElementById('shortCitation');
@@ -1451,9 +1511,10 @@
             const footnoteAuthors = bibliographyAuthorsToFootnote(parts.authorText);
             const titleText = formatCitationTitle(parts.titleText || '');
             const footnotePublication = splitFootnotePublicationDetails(parts.publication);
+            const footnoteDetails = normalizeFootnoteBookDetails(footnotePublication.details);
             const titleAndDetails = [
                 titleText,
-                footnotePublication.details
+                footnoteDetails
             ].filter(Boolean).join(', ');
             const titleAndImprint = titleAndDetails + (footnotePublication.imprint ? ' (' + footnotePublication.imprint + ')' : '');
             const footnote = [
@@ -1700,7 +1761,7 @@
 
         function extractSharedCreatorRole(authorText) {
             const cleaned = trimTerminalPunctuation(cleanAuthorLine(authorText));
-            const match = cleaned.match(/^(.*?)\s*,?\s+(eds?\.?|comps?\.?)$/i);
+            const match = cleaned.match(/^(.*?)\s*,?\s+(eds?\.?|comps?\.?|trans\.?)$/i);
             if (!match) {
                 return { names: cleaned, role: '' };
             }
@@ -1729,7 +1790,7 @@
         }
 
         function parseBibliographyCitation(bibliography) {
-            const source = normalizeLeadingInvertedInitialAuthorHeading(cleanCitationText(bibliography));
+            const source = normalizeLeadingInvertedInitialAuthorHeading(normalizeCompoundCreatorRoleText(bibliography));
             const emMatch = source.match(/<em>([\s\S]+?)<\/em>/i);
             let authorText = '';
             let titleText = '';
