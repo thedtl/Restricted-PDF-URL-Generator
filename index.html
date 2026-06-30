@@ -2369,6 +2369,7 @@
             document.getElementById('shortCitation').value = '';
             document.getElementById('linkError').style.display = 'none';
             showCitationNote('');
+            resetCopyButtons();
             document.getElementById('results').style.display = 'none';
             
             downloadCheckbox.checked = false;
@@ -2389,21 +2390,41 @@
 
         function copyTextToClipboard(textToCopy, btnElement) {
             navigator.clipboard.writeText(textToCopy).then(() => {
-                const originalText = btnElement.textContent;
+                if (!btnElement.dataset.copyDefaultText) {
+                    btnElement.dataset.copyDefaultText = btnElement.textContent;
+                }
+                if (btnElement.copyResetTimer) {
+                    clearTimeout(btnElement.copyResetTimer);
+                }
                 btnElement.textContent = "Copied!";
                 btnElement.style.background = "#d1e7dd";
                 btnElement.style.borderColor = "#badbcc";
                 btnElement.style.color = "#0f5132";
 
-                setTimeout(() => {
-                    btnElement.textContent = originalText;
-                    btnElement.style.background = "white";
-                    btnElement.style.borderColor = "#ccc";
-                    btnElement.style.color = "#333";
-                }, 2000);
+                btnElement.copyResetTimer = setTimeout(() => resetCopyButtonState(btnElement), 2000);
             }).catch(err => {
                 console.error('Failed to copy: ', err);
             });
+        }
+
+        function resetCopyButtons() {
+            document.querySelectorAll('.metadata-copy-btn').forEach(button => {
+                resetCopyButtonState(button, 'Copy');
+            });
+        }
+
+        function resetCopyButtonState(button, defaultText = '') {
+            if (!button) return;
+            if (button.copyResetTimer) {
+                clearTimeout(button.copyResetTimer);
+                button.copyResetTimer = null;
+            }
+            button.textContent = defaultText || button.dataset.copyDefaultText || 'Copy';
+            button.classList.remove('copied', 'success', 'btn-success');
+            button.disabled = false;
+            button.style.background = '';
+            button.style.borderColor = '';
+            button.style.color = '';
         }
 
         // --- Enter key to generate ---
