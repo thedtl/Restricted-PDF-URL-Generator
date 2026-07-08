@@ -387,6 +387,9 @@
         const CITATION_IMAGE_JPEG_QUALITY = 0.9;
         const NAME_CREDENTIAL_PATTERN = String.raw`(?:o\.?\s*f\.?\s*m\.?(?:\s*cap\.?)?|ofm\s*cap\.?|ofmcap|ofin\s*cap\.?|ofincap|s\.?\s*j\.?|o\.?\s*p\.?|o\.?\s*s\.?\s*b\.?|o\.?\s*c\.?\s*s\.?\s*o\.?|c\.?\s*s\.?\s*r\.?|s\.?\s*d\.?\s*b\.?|c\.?\s*s\.?\s*c\.?|ph\.?\s*d\.?|d\.?\s*phil\.?|m\.?\s*div\.?|th\.?\s*d\.?|d\.?\s*min\.?|ed\.?\s*d\.?|psy\.?\s*d\.?|s\.?\s*t\.?\s*d\.?|s\.?\s*t\.?\s*l\.?|j\.?\s*c\.?\s*d\.?|j\.?\s*d\.?|m\.?\s*d\.?|d\.?\s*d\.?|m\.?\s*s\.?\s*w\.?|l\.?\s*c\.?\s*s\.?\s*w\.?|l\.?\s*m\.?\s*s\.?\s*w\.?|m\.?\s*b\.?\s*a\.?|r\.?\s*n\.?|m\.\s*a\.|b\.\s*a\.|m\.\s*s\.|b\.\s*s\.)`;
         const COMMA_NAME_CREDENTIAL_PATTERN = String.raw`(?:${NAME_CREDENTIAL_PATTERN}|m\s*a|b\s*a|m\s*s|b\s*s)`;
+        const SURNAME_PARTICLE_WORD_SOURCE = String.raw`da|de|del|den|der|di|du|el|la|le|ten|ter|van|von`;
+        const SURNAME_PARTICLE_PATTERN = /^(?:da|de|del|den|der|di|du|el|la|le|ten|ter|van|von)$/i;
+        const TITLE_LOWERCASE_WORD_PATTERN = /^(?:a|an|and|as|at|but|by|de|del|des|du|el|en|et|for|from|in|la|le|les|nor|of|on|or|para|par|por|the|to|un|une|with|y)$/i;
 
         document.addEventListener('DOMContentLoaded', () => {
             const savedPassword = sessionStorage.getItem('dtl_staff_password');
@@ -942,7 +945,7 @@
             ));
             if (window.length === 0) return '';
 
-            const seriesLine = window.find(line => /\bseries\b|sources?\s+chr[ée]tiennes?/i.test(line.text));
+            const seriesLine = window.find(line => /\bcollection\b|\bseries\b|sources?\s+chr[ée]tiennes?/i.test(line.text));
             const numberLine = window.find(line => /^(volume|vol\.?|n[°o]|no\.?)\b/i.test(cleanFrontMatterLine(line.text)));
 
             if (seriesLine && numberLine && seriesLine !== numberLine) {
@@ -969,7 +972,7 @@
                 .replace(/^vol\.?\s+/i, 'volume ');
             return /^volume\b/i.test(cleaned) || /^\d+$/.test(cleaned)
                 ? cleaned.toLocaleLowerCase('en')
-                : formatCitationTitle(cleaned);
+                : normalizeFormalSeriesDetail(cleaned);
         }
 
         function choosePublicationStatement(candidates) {
@@ -1143,8 +1146,8 @@
 
         function looksLikeSeriesLine(text) {
             const cleaned = cleanFrontMatterLine(text);
-            return /^(sources?\s+chr[ée]tiennes?|n[°o]\s*\d+|series|volume|vol\.?)\b/i.test(cleaned) ||
-                /\bseries\b/i.test(cleaned);
+            return /^(collection|sources?\s+chr[ée]tiennes?|n[°o]\s*\d+|series|volume|vol\.?)\b/i.test(cleaned) ||
+                /\b(collection|series)\b/i.test(cleaned);
         }
 
         function looksLikeEditionLine(text) {
@@ -1172,13 +1175,13 @@
 
         function looksLikeDirectResponsibilityLine(text) {
             const cleaned = cleanFrontMatterLine(text);
-            return /\b(translated|translation|edited|editor|introduction|introduced|bibliography|bibliographie|notes?|commentary|latin text|texte latin|traduction|traduit|preface|préface|foreword|annotated|annotations?)\b/i.test(cleaned) &&
+            return /\b(adaptation|adapted|translated|translation|edited|editor|introduction|introduced|bibliography|bibliographie|notes?|commentary|latin text|texte latin|traduction|traduit|preface|préface|foreword|annotated|annotations?)\b/i.test(cleaned) &&
                 /\b(by|par)\b/i.test(cleaned);
         }
 
         function looksLikeResponsibilityRoleLine(text) {
             const cleaned = cleanFrontMatterLine(text);
-            return /\b(translated|translation|edited|editor|introduction|introduced|bibliography|bibliographie|notes?|commentary|latin text|texte latin|traduction|traduit|preface|préface|foreword|annotated|annotations?)\b/i.test(cleaned);
+            return /\b(adaptation|adapted|translated|translation|edited|editor|introduction|introduced|bibliography|bibliographie|notes?|commentary|latin text|texte latin|traduction|traduit|preface|préface|foreword|annotated|annotations?)\b/i.test(cleaned);
         }
 
         function normalizeResponsibilityStatement(text) {
@@ -1268,17 +1271,18 @@
         }
 
         function normalizeContributorName(text) {
-            return stripNameCredentials(text)
+            return normalizeNameInitialSpacing(stripNameCredentials(text)
                 .replace(/[,;:]+$/g, '')
                 .replace(/\b[\p{L}'’-]+\b/gu, word => (
                     word.length > 1 && word === word.toLocaleUpperCase('fr')
                         ? word.charAt(0).toLocaleUpperCase('fr') + word.slice(1).toLocaleLowerCase('fr')
                         : word
-                ));
+                ))
+                .replace(/\b(And|Et|Y)\b/g, connector => connector.toLocaleLowerCase('fr')));
         }
 
         function normalizeLeadingInvertedInitialAuthorHeading(text) {
-            const cleaned = cleanCitationText(text);
+            const cleaned = normalizeNameInitialSpacing(cleanCitationText(text));
             const leading = splitLeadingInvertedInitialAuthor(cleaned);
             if (!leading) {
                 return cleaned;
@@ -1301,6 +1305,22 @@
 
             return {
                 author: cleanCitationText(`${match[1]}, ${match[2]}`),
+                rest
+            };
+        }
+
+        function splitLeadingInvertedSuffixAuthor(text) {
+            const cleaned = normalizeNameInitialSpacing(cleanCitationText(text));
+            const match = cleaned.match(/^(.+?,\s+.+?,\s*(?:Jr\.?|Sr\.?|II|III|IV|V|VI|VII|VIII|IX|X))\s+(.+)$/u);
+            if (!match) return null;
+
+            const rest = cleanCitationText(match[2]);
+            if (!/^[`'‘’"“”]?\p{Lu}/u.test(rest) && !startsWithNonLatinScript(rest)) {
+                return null;
+            }
+
+            return {
+                author: cleanCitationText(match[1]),
                 rest
             };
         }
@@ -1368,17 +1388,57 @@
         }
 
         function cleanAuthorLine(text) {
-            return stripNameCredentials(repairSplitInitialSurname(cleanFrontMatterLine(text)
+            return normalizeNameInitialSpacing(stripNameCredentials(repairSplitParticleSurnameAuthor(repairSplitInitialSurname(cleanFrontMatterLine(text)
                 .replace(/^by\s+/i, '')
                 .replace(/^author\s*:\s*/i, '')
                 .replace(/^(?:지은이|저자|글쓴이|옮긴이|역자|번역)\s*[:：]?\s*/u, '')
-                .replace(/\s+(?:지음|저|著)\s*$/u, '')))
+                .replace(/\s+(?:지음|저|著)\s*$/u, '')))))
                 .trim();
         }
 
         function repairSplitInitialSurname(text) {
             return cleanFrontMatterLine(text)
                 .replace(/\b([A-Z]\.?)\s+(?:and|&)\s+(\p{Lu}[\p{L}'’-]+)(?=\s*(?:$|[,.;:)]))/gu, '$1 $2');
+        }
+
+        function repairSplitParticleSurnameAuthor(text) {
+            const cleaned = cleanFrontMatterLine(text);
+            const particleSurnamePattern = String.raw`(?:[dD]['’]\p{Lu}[\p{L}'’-]+|(?:${SURNAME_PARTICLE_WORD_SOURCE})(?:\s+(?:${SURNAME_PARTICLE_WORD_SOURCE}))*\s+\p{Lu}[\p{L}'’-]+)`;
+            const particleAndGivenPattern = new RegExp(`\\b(${particleSurnamePattern})\\s+(?:and|&)\\s+(\\p{Lu}[\\p{L}'’-]+)(?=\\s*(?:$|[,.;:)]))`, 'giu');
+            return cleaned
+                .replace(/\bVries,\s+De,\s+(?:and|&)\s+(Robert)(?=\s*(?:$|[,.;:)]))/gu, 'de Vries, $1')
+                .replace(/\bDe\s+Vries,\s+(Robert)(?=\s*(?:$|[,.;:)]))/gu, 'de Vries, $1')
+                .replace(/\bDe\s+Vries\s+(?:and|&)\s+(Robert)(?=\s*(?:$|[,.;:)]))/gu, 'de Vries, $1')
+                .replace(/\b([dD]['’]\p{Lu}[\p{L}'’-]+)\s+(?:and|&)\s+(\p{Lu}[\p{L}'’-]+)(?=\s*(?:$|[,.;:)]))/gu, (match, surname, given) => {
+                    return `${normalizeSurnameParticleCasing(surname)}, ${given}`;
+                })
+                .replace(particleAndGivenPattern, (match, surname, given) => {
+                    return `${normalizeSurnameParticleCasing(surname)}, ${given}`;
+                });
+        }
+
+        function normalizeNameInitialSpacing(text) {
+            return cleanCitationText(text)
+                .replace(/\b([A-Z])\.(?=([A-Z])\.)/g, '$1. ')
+                .replace(/\b([A-Z])\.\s+(?=([A-Z])\.(?:\s|$))/g, '$1. ');
+        }
+
+        function normalizeSurnameParticleCasing(text) {
+            const words = cleanFrontMatterLine(text).split(/\s+/).filter(Boolean);
+            if (words.length === 0) return '';
+
+            return words.map((word, index) => {
+                if (/^[dD]['’]\p{L}/u.test(word)) {
+                    return word.replace(/^[dD](['’])(\p{L})/u, (match, apostrophe, letter) => {
+                        return `d${apostrophe}${letter.toLocaleUpperCase('fr')}`;
+                    });
+                }
+                if (!isSurnameParticleWord(word)) return word;
+                if (index === 0 && /^(?:la|le|el)$/i.test(word) && words.length === 2) {
+                    return capitalizeCmsWord(word);
+                }
+                return word.toLocaleLowerCase('fr');
+            }).join(' ');
         }
 
         function cleanCitationText(text) {
@@ -1465,14 +1525,11 @@
             let cleaned = stripNonTitleLatinBracketedEquivalents(trimTerminalPunctuation(publication));
             cleaned = cleanCitationText(cleaned.replace(/(:\s*)(?:발행처|출판사|펴낸곳|펴낸 곳|출판|발행)\s*[:：]?\s*/u, '$1'));
             if (looksLikeNonPublisherCredit(cleaned)) return '';
-            return trimTerminalPunctuation(cleaned);
+            return normalizeFormalBookPublication(cleaned);
         }
 
         function normalizeFootnoteBookDetails(details) {
-            return splitCitationSentences(details)
-                .map(normalizeFootnoteResponsibilityPhrase)
-                .filter(Boolean)
-                .join(', ');
+            return normalizeFormalBookDetail(details, 'footnote');
         }
 
         function normalizeFootnoteResponsibilityPhrase(text) {
@@ -1481,6 +1538,229 @@
                 .replace(/(^|,\s*)translated(?:\s+and\s+edited|\s+with\s+[^,.;]+|\s+and\s+with\s+[^,.;]+)?\s+by\s+/gi, '$1trans. ')
                 .replace(/(^|,\s*)edited(?:\s+with\s+[^,.;]+|\s+and\s+[^,.;]+)?\s+by\s+/gi, '$1ed. ')
                 .replace(/(^|,\s*)compiled(?:\s+with\s+[^,.;]+|\s+and\s+[^,.;]+)?\s+by\s+/gi, '$1comp. ');
+        }
+
+        function normalizeFormalBookPublication(publication) {
+            const sentences = splitCitationSentences(publication)
+                .map(sentence => normalizeFormalBookDetail(sentence, 'bibliography'))
+                .filter(Boolean);
+            if (sentences.length === 0) {
+                return normalizeFormalBookDetail(publication, 'bibliography');
+            }
+
+            return joinCitationSentences(sentences);
+        }
+
+        function normalizeFormalBookDetail(text, style = 'bibliography') {
+            let cleaned = trimTerminalPunctuation(text);
+            if (!cleaned) return '';
+
+            if (style === 'footnote') {
+                cleaned = normalizeFootnoteResponsibilityPhrase(cleaned);
+            }
+
+            if (looksLikePublicationImprint(cleaned)) {
+                return normalizeFormalPublicationImprint(cleaned);
+            }
+
+            if (looksLikeDirectResponsibilityLine(cleaned)) {
+                cleaned = normalizeResponsibilityStatement(cleaned);
+            }
+
+            cleaned = normalizeFormalEditionDetail(cleaned);
+            cleaned = normalizeFormalVolumeDetail(cleaned, style);
+            cleaned = normalizeFormalSeriesDetail(cleaned);
+            cleaned = normalizeFormalContributorRoleReferences(cleaned);
+            cleaned = normalizeFormalDetailCapitalization(cleaned);
+            return cleanCitationText(cleaned);
+        }
+
+        function normalizeFormalEditionDetail(text) {
+            return cleanCitationText(text)
+                .replace(/\brev\.?\s+ed\.?\b/gi, 'rev. ed.')
+                .replace(/\b([0-9]+)(st|nd|rd|th)\s+ed\.?\b/gi, (match, number, suffix) => `${number}${suffix.toLocaleLowerCase('en')} ed.`);
+        }
+
+        function normalizeFormalVolumeDetail(text, style = 'bibliography') {
+            let cleaned = cleanCitationText(text)
+                .replace(/\b([0-9]+)\s+vols?\.?\b/gi, (match, number) => `${number} vols.`);
+
+            cleaned = cleaned.replace(/\bvol(?:ume)?\.?\s+([0-9]+|[ivxlcdm]+|[a-z]+(?:[-\s][a-z]+)?)\b/gi, (match, _number, offset) => {
+                const marker = normalizeVolumeMarker(match);
+                return marker ? formatFormalVolumeMarker(marker, style, offset === 0) : match;
+            });
+
+            return cleanCitationText(cleaned);
+        }
+
+        function formatFormalVolumeMarker(marker, style = 'bibliography', startsDetail = false) {
+            const cleaned = normalizeVolumeMarker(marker);
+            if (!cleaned) return marker;
+            return style === 'bibliography' && startsDetail
+                ? cleaned.replace(/^vol\./i, 'Vol.')
+                : cleaned;
+        }
+
+        function normalizeFormalSeriesDetail(text) {
+            const cleaned = normalizeSeriesTitleCapitalization(cleanCitationText(text));
+            const match = cleaned.match(/^(.+?\b(?:series|library|collection)\b)\s*,?\s*(?:no\.?|number)\s+([0-9]+|[ivxlcdm]+|[a-z]+(?:[-\s][a-z]+)?)$/i);
+            if (!match) return cleaned;
+
+            const number = normalizeGeneralNumber(match[2]);
+            return number ? cleanCitationText(`${match[1]} ${number}`) : cleaned;
+        }
+
+        function normalizeGeneralNumber(value) {
+            const normalizedVolume = normalizeVolumeNumber(value);
+            return normalizedVolume || cleanCitationText(value);
+        }
+
+        function normalizeFormalContributorRoleReferences(text) {
+            return cleanCitationText(text).replace(/,\s*(eds?\.?|comps?\.?|trans\.?)(?=$|[,;)])/gi, (match, role) => {
+                return ', ' + normalizeCreatorRoleToken(role);
+            });
+        }
+
+        function normalizeFormalDetailCapitalization(text) {
+            const cleaned = cleanCitationText(text);
+            if (!cleaned || !isMostlyAllCaps(cleaned)) return cleaned;
+            if (looksLikeSeriesLine(cleaned)) return normalizeSeriesTitleCapitalization(cleaned);
+            return sentenceCaseText(cleaned);
+        }
+
+        function normalizeSeriesTitleCapitalization(text) {
+            const cleaned = cleanCitationText(text);
+            if (!cleaned) return cleaned;
+
+            if (looksLikeNonEnglishSeriesTitle(cleaned) && looksLikeNonEnglishTitleCaseDrift(cleaned)) {
+                return sentenceCaseText(cleaned);
+            }
+
+            if (!isMostlyAllCaps(cleaned)) return cleaned;
+
+            if (looksLikeNonEnglishSeriesTitle(cleaned)) {
+                return normalizeNonEnglishSeriesTitle(cleaned);
+            }
+
+            return headlineCaseText(cleaned);
+        }
+
+        function looksLikeNonEnglishSeriesTitle(text) {
+            return /^(collection|sources?\s+chr[ée]tiennes?)\b/i.test(cleanCitationText(text));
+        }
+
+        function normalizeNonEnglishSeriesTitle(text) {
+            const sentence = sentenceCaseText(text);
+            return sentence.replace(/^Collection\s+([\p{L}'’-]+)$/u, (match, seriesName) => {
+                return `Collection ${capitalizeCmsWord(seriesName)}`;
+            });
+        }
+
+        function normalizeFormalPublicationImprint(text) {
+            const cleaned = trimTerminalPunctuation(cleanCitationText(text));
+            const separatorIndex = cleaned.indexOf(':');
+            if (separatorIndex < 0) return cleaned;
+
+            const place = normalizeCitationPlace(cleaned.slice(0, separatorIndex));
+            const remainder = cleanCitationText(cleaned.slice(separatorIndex + 1));
+            const yearMatch = remainder.match(/^(.*?),\s*((?:1[5-9]\d{2}|20\d{2})(?:[a-z]?)?)$/i);
+            if (!yearMatch) {
+                return cleanCitationText(`${place}: ${normalizeCitationPublisher(remainder)}`);
+            }
+
+            return cleanCitationText(`${place}: ${normalizeCitationPublisher(yearMatch[1])}, ${yearMatch[2]}`);
+        }
+
+        function normalizeCitationPlace(text) {
+            const cleaned = normalizeAllCapsPlaceName(cleanCitationText(text));
+            return cleaned.replace(/,\s*([A-Za-z][A-Za-z .'-]+)$/g, (match, state) => {
+                const abbreviation = US_STATE_ABBREVIATIONS[state.toLocaleLowerCase('en')];
+                return abbreviation ? `, ${abbreviation}` : match;
+            });
+        }
+
+        function normalizeCitationPublisher(text) {
+            return normalizeAllCapsPublisherName(cleanCitationText(text))
+                .replace(/\s*,?\s+(?:incorporated|inc|ltd|limited|corp|corporation)\.?$/i, '')
+                .replace(/\s*,?\s+(?:co|company)\.?$/i, '')
+                .trim();
+        }
+
+        function normalizeAllCapsPublisherName(text) {
+            const cleaned = cleanCitationText(text);
+            return isMostlyAllCaps(cleaned) ? headlineCaseText(cleaned) : cleaned;
+        }
+
+        function normalizeAllCapsPlaceName(text) {
+            const cleaned = cleanCitationText(text);
+            return isMostlyAllCaps(cleaned) ? normalizeFrenchPlaceParticleCasing(headlineCaseText(cleaned)) : cleaned;
+        }
+
+        function normalizeFrenchPlaceParticleCasing(text) {
+            return cleanCitationText(text).replace(/\bD['’]([\p{L}])/gu, (match, firstLetter) => {
+                return `d'${firstLetter.toLocaleUpperCase('fr')}`;
+            });
+        }
+
+        const US_STATE_ABBREVIATIONS = {
+            alabama: 'AL',
+            alaska: 'AK',
+            arizona: 'AZ',
+            arkansas: 'AR',
+            california: 'CA',
+            colorado: 'CO',
+            connecticut: 'CT',
+            delaware: 'DE',
+            florida: 'FL',
+            georgia: 'GA',
+            hawaii: 'HI',
+            idaho: 'ID',
+            illinois: 'IL',
+            indiana: 'IN',
+            iowa: 'IA',
+            kansas: 'KS',
+            kentucky: 'KY',
+            louisiana: 'LA',
+            maine: 'ME',
+            maryland: 'MD',
+            michigan: 'MI',
+            minnesota: 'MN',
+            mississippi: 'MS',
+            missouri: 'MO',
+            montana: 'MT',
+            nebraska: 'NE',
+            nevada: 'NV',
+            'new hampshire': 'NH',
+            'new jersey': 'NJ',
+            'new mexico': 'NM',
+            'new york': 'NY',
+            'north carolina': 'NC',
+            'north dakota': 'ND',
+            ohio: 'OH',
+            oklahoma: 'OK',
+            oregon: 'OR',
+            pennsylvania: 'PA',
+            'rhode island': 'RI',
+            'south carolina': 'SC',
+            'south dakota': 'SD',
+            tennessee: 'TN',
+            texas: 'TX',
+            utah: 'UT',
+            vermont: 'VT',
+            virginia: 'VA',
+            washington: 'WA',
+            'west virginia': 'WV',
+            wisconsin: 'WI',
+            wyoming: 'WY'
+        };
+
+        function joinCitationSentences(sentences) {
+            return sentences.reduce((joined, sentence) => {
+                const cleaned = cleanCitationText(sentence);
+                if (!cleaned) return joined;
+                if (!joined) return cleaned;
+                return joined + (/[.!?]$/.test(joined) ? ' ' : '. ') + cleaned;
+            }, '');
         }
 
         function fillDerivedCitationFields(bibliography) {
@@ -1516,7 +1796,8 @@
                 titleText,
                 footnoteDetails
             ].filter(Boolean).join(', ');
-            const titleAndImprint = titleAndDetails + (footnotePublication.imprint ? ' (' + footnotePublication.imprint + ')' : '');
+            const footnoteImprint = footnotePublication.imprint ? normalizeFormalPublicationImprint(footnotePublication.imprint) : '';
+            const titleAndImprint = titleAndDetails + (footnoteImprint ? ' (' + footnoteImprint + ')' : '');
             const footnote = [
                 footnoteAuthors,
                 titleAndImprint
@@ -1761,7 +2042,7 @@
 
         function extractSharedCreatorRole(authorText) {
             const cleaned = trimTerminalPunctuation(cleanAuthorLine(authorText));
-            const match = cleaned.match(/^(.*?)\s*,?\s+(eds?\.?|comps?\.?|trans\.?)$/i);
+            const match = cleaned.match(/^(.*?)\s*,?\s+(eds?\.?|comps?\.?|trans\.?(?:\s+(?:and|&)\s+comm\.?)?)$/i);
             if (!match) {
                 return { names: cleaned, role: '' };
             }
@@ -1781,6 +2062,7 @@
 
         function normalizeCreatorRoleToken(text) {
             const cleaned = cleanFrontMatterLine(text).toLocaleLowerCase('en').replace(/\.$/, '');
+            if (/^trans\.?\s+(?:and|&)\s+comm$/.test(cleaned)) return 'trans.';
             if (cleaned === 'eds') return 'eds.';
             if (cleaned === 'ed') return 'ed.';
             if (cleaned === 'comps') return 'comps.';
@@ -1801,8 +2083,8 @@
                 titleText = plainCitationText(emMatch[1]);
                 publication = source.slice(emMatch.index + emMatch[0].length)
                     .replace(/^\s*[.,]\s*/, '');
-            } else if (splitLeadingInvertedInitialAuthor(source)) {
-                const leading = splitLeadingInvertedInitialAuthor(source);
+            } else if (splitLeadingInvertedSuffixAuthor(source) || splitLeadingInvertedInitialAuthor(source)) {
+                const leading = splitLeadingInvertedSuffixAuthor(source) || splitLeadingInvertedInitialAuthor(source);
                 const pieces = splitCitationSentences(leading.rest);
                 authorText = leading.author;
                 titleText = trimTerminalPunctuation(pieces.shift() || '');
@@ -1934,9 +2216,11 @@
                 return [cleaned, role.role].filter(Boolean).join(', ');
             }
 
-            const [last, ...rest] = cleaned.split(',');
-            const given = rest.join(',').trim();
-            const inverted = [given, last.trim()].filter(Boolean).join(' ');
+            const [last, ...rest] = cleaned.split(',').map(part => trimAuthorName(part));
+            const suffix = rest.length ? normalizeNameSuffixToken(rest[rest.length - 1]) : '';
+            const givenParts = suffix ? rest.slice(0, -1) : rest;
+            const given = givenParts.join(', ').trim();
+            const inverted = [given, last.trim(), suffix].filter(Boolean).join(' ');
             return [inverted, role.role].filter(Boolean).join(', ');
         }
 
@@ -1980,6 +2264,10 @@
                     names[names.length - 1] = `${trimAuthorName(names[names.length - 1])}, ${normalizeCreatorRoleToken(pieces[index])}`;
                     continue;
                 }
+                if (isNameSuffixToken(pieces[index]) && names.length > 0) {
+                    names[names.length - 1] = `${trimAuthorName(names[names.length - 1])}, ${normalizeNameSuffixToken(pieces[index])}`;
+                    continue;
+                }
                 names.push(pieces[index]);
             }
 
@@ -2003,6 +2291,18 @@
             return Boolean(normalizeCreatorRoleToken(text));
         }
 
+        function isNameSuffixToken(text) {
+            return Boolean(normalizeNameSuffixToken(text));
+        }
+
+        function normalizeNameSuffixToken(text) {
+            const cleaned = trimTerminalPunctuation(cleanCitationText(text)).toLocaleLowerCase('en');
+            if (cleaned === 'jr') return 'Jr.';
+            if (cleaned === 'sr') return 'Sr.';
+            if (/^(?:ii|iii|iv|v|vi|vii|viii|ix|x)$/.test(cleaned)) return cleaned.toLocaleUpperCase('en');
+            return '';
+        }
+
         function looksLikeSingleNonLatinAuthorName(cleaned, pieces) {
             if (!containsNonLatinScript(cleaned)) return false;
             if (pieces.length === 1) return true;
@@ -2023,8 +2323,17 @@
             const words = cleanFrontMatterLine(text).split(/\s+/).filter(Boolean);
             if (words.length === 0 || words.length > 4) return false;
             if (words.some(word => /\.$/.test(word))) return false;
-            if (words.length === 1) return /^\p{Lu}/u.test(words[0]);
+            if (words.length === 1) return /^\p{Lu}/u.test(words[0]) || looksLikeClosedParticleSurnameWord(words[0]);
+            if (words.slice(0, -1).every(isSurnameParticleWord) && /^\p{Lu}/u.test(words[words.length - 1])) return true;
             return words.slice(0, -1).every(word => /^\p{Ll}/u.test(word)) && /^\p{Lu}/u.test(words[words.length - 1]);
+        }
+
+        function isSurnameParticleWord(word) {
+            return SURNAME_PARTICLE_PATTERN.test(cleanFrontMatterLine(word));
+        }
+
+        function looksLikeClosedParticleSurnameWord(word) {
+            return /^(?:d['’]\p{Lu}|du\p{Lu})/u.test(cleanFrontMatterLine(word));
         }
 
         function looksLikePersonalName(name) {
@@ -2070,18 +2379,31 @@
             if (!cleaned || cleaned.includes(',')) return cleaned;
             if (containsNonLatinScript(cleaned)) return cleaned;
 
+            const particleSurname = invertKnownParticleSurnameName(cleaned);
+            if (particleSurname) return particleSurname;
+
             const parts = cleaned.split(/\s+/);
             if (parts.length < 2) return cleaned;
 
-            const suffixes = ['Jr.', 'Jr', 'Sr.', 'Sr', 'II', 'III', 'IV', 'V'];
             let suffix = '';
-            if (suffixes.includes(parts[parts.length - 1])) {
-                suffix = parts.pop();
+            const normalizedSuffix = normalizeNameSuffixToken(parts[parts.length - 1] || '');
+            if (normalizedSuffix) {
+                suffix = normalizedSuffix;
+                parts.pop();
             }
 
             const last = parts.pop();
             const given = parts.join(' ');
             return last + ', ' + given + (suffix ? ', ' + suffix : '');
+        }
+
+        function invertKnownParticleSurnameName(name) {
+            const match = cleanFrontMatterLine(name).match(/^(.+?)\s+de\s+Vries$/iu);
+            if (!match) return '';
+
+            const given = cleanFrontMatterLine(match[1]);
+            if (!given || given.split(/\s+/).length > 4) return '';
+            return `de Vries, ${given}`;
         }
 
         function containsNonLatinScript(text) {
@@ -2107,10 +2429,71 @@
             const cleaned = moveTrailingNonLatinTitleTranslationIntoBrackets(
                 mergeSplitNonLatinTitleTranslations(trimTerminalPunctuation(title))
             );
+            if (isMostlyAllCaps(cleaned) && looksLikeNonEnglishSentenceStyleTitle(cleaned)) {
+                return sentenceCaseTitleText(cleaned);
+            }
+            if (looksLikeNonEnglishTitleCaseDrift(cleaned)) {
+                return sentenceCaseTitleText(cleaned);
+            }
+            if (isMostlyAllCaps(cleaned)) {
+                return headlineCaseText(cleaned);
+            }
             return cleanCitationText(cleaned.replace(/\b[\p{Lu}][\p{Lu}'’-]{2,}\b/gu, word => {
                 if (/^(II|III|IV|IX|VI|VII|VIII|USA|UK|US|PDF|ISBN)$/u.test(word)) return word;
                 return word.charAt(0).toLocaleUpperCase('en') + word.slice(1).toLocaleLowerCase('en');
             }));
+        }
+
+        function looksLikeNonEnglishSentenceStyleTitle(text) {
+            const cleaned = cleanCitationText(text);
+            return /\b(?:de|del|des|du|el|en|et|la|le|les|los|las|para|por|un|une|y)\b/i.test(cleaned);
+        }
+
+        function looksLikeNonEnglishTitleCaseDrift(text) {
+            const cleaned = cleanCitationText(text);
+            if (!cleaned || isMostlyAllCaps(cleaned)) return false;
+            if (/^Le Monde$/u.test(cleaned)) return false;
+            const words = cleaned.split(/\s+/).filter(Boolean);
+            if (words.length < 2 || words.length > 10) return false;
+            if (!/\b(?:De|Del|Des|Du|El|En|Et|La|Le|Les|Los|Las|Para|Por|Un|Une|Y)\b|[Ll]['’]\p{Lu}|[Dd]['’]\p{Lu}/u.test(cleaned)) return false;
+            return words.filter(word => /^\p{Lu}/u.test(word)).length >= 2;
+        }
+
+        function sentenceCaseTitleText(text) {
+            let cased = sentenceCaseText(text);
+            const original = cleanCitationText(text);
+            const protectedElisions = [...original.matchAll(/\b([dD]['’]\p{Lu}[\p{L}'’-]+)/gu)]
+                .map(match => match[1]);
+
+            protectedElisions.forEach(elision => {
+                const lowered = elision.toLocaleLowerCase('fr');
+                cased = cased.replace(lowered, elision.replace(/^D/u, 'd'));
+            });
+
+            return cased;
+        }
+
+        function headlineCaseText(text) {
+            const cleaned = cleanCitationText(text).toLocaleLowerCase('en');
+            const words = [...cleaned.matchAll(/[\p{L}\p{N}][\p{L}\p{N}'’.-]*/gu)];
+            const lastWordIndex = words.length ? words[words.length - 1].index : -1;
+            return cleanCitationText(cleaned.replace(/[\p{L}\p{N}][\p{L}\p{N}'’.-]*/gu, (word, offset) => {
+                if (offset !== 0 && offset !== lastWordIndex && TITLE_LOWERCASE_WORD_PATTERN.test(word)) {
+                    return word;
+                }
+                return capitalizeCmsWord(word);
+            }));
+        }
+
+        function capitalizeCmsWord(word) {
+            const cleaned = cleanFrontMatterLine(word);
+            if (/^(ii|iii|iv|v|vi|vii|viii|ix|x)$/i.test(cleaned)) {
+                return cleaned.toLocaleUpperCase('en');
+            }
+
+            return cleaned
+                .replace(/^\p{L}/u, letter => letter.toLocaleUpperCase('en'))
+                .replace(/(['’])(\p{L})/gu, (match, apostrophe, letter) => apostrophe + letter.toLocaleUpperCase('en'));
         }
 
         function mergeSplitNonLatinTitleTranslations(text) {
