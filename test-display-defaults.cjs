@@ -34,16 +34,20 @@ function page() {
 
 const citation = 'Smith, Alex. A Book: Its Subtitle. 3rd ed. Example Series, vol. 40B. New York: Example Press, 2020.';
 
-test('Short Display contains only title/subtitle while citation details remain in footnote', () => {
+test('Short Display contains the bibliography author and title/subtitle, without publication details', () => {
     const { context: c } = page();
     const result = c.buildCitationVariantsFromBibliography(citation);
-    assert.equal(result.short, 'A Book: Its Subtitle');
+    assert.equal(result.short, 'Smith, Alex. A Book: Its Subtitle');
     for (const detail of ['Alex Smith', '3rd ed.', 'Example Series', '40B', 'New York', 'Example Press', '2020']) {
         assert.ok(result.footnote.includes(detail), result.footnote);
     }
-    assert.equal(c.buildCitationVariantsFromBibliography('Moore, Carey A. Esther. The Anchor Bible.').short, 'Esther');
-    assert.equal(c.buildCitationVariantsFromBibliography('Smith, Alex. 1984 and Its Readers. London: Example Press, 2000.').short, '1984 and Its Readers');
-    assert.equal(c.buildCitationVariantsFromBibliography('Smith, Alex. A History, Volume 2. London: Example Press, 2000.').short, 'A History, Volume 2');
+    assert.equal(c.buildCitationVariantsFromBibliography('Moore, Carey A. Esther. The Anchor Bible.').short, 'Moore, Carey A. Esther');
+    assert.equal(c.buildCitationVariantsFromBibliography('Smith, Alex. 1984 and Its Readers. London: Example Press, 2000.').short, 'Smith, Alex. 1984 and Its Readers');
+    assert.equal(c.buildCitationVariantsFromBibliography('Smith, Alex. A History, Volume 2. London: Example Press, 2000.').short, 'Smith, Alex. A History, Volume 2');
+    for (const author of ['García Márquez, Gabriel', 'Clement of Alexandria', 'Smith, J. A', 'Smith, Alex, and Jane Brown']) {
+        assert.equal(c.buildCitationVariantsFromBibliography(`${author}. A Book. London: Example Press, 2000.`).short, `${author}. A Book`);
+    }
+    assert.equal(c.buildCitationVariantsFromBibliography('<em>A Book: Its Subtitle</em>. London: Example Press, 2000.').short, 'A Book: Its Subtitle');
 });
 
 test('missing title never falls back to a complete citation or a parsed publication imprint', () => {
@@ -74,7 +78,7 @@ test('new and cleared forms allow downloads; explicit opt-out still reaches all 
         assert.equal(new URL(url).searchParams.get('download'), String(allowed));
         assert.ok(field('embedCode').textContent.includes(url));
         assert.ok(field('accordionCode').textContent.includes(url));
-        assert.equal(field('shortCitation').value, 'A Book: Its Subtitle');
+        assert.equal(field('shortCitation').value, 'Smith, Alex. A Book: Its Subtitle');
         assert.ok(field('citation').value.includes('Example Press'));
     }
     c.clearForm();

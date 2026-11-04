@@ -324,7 +324,7 @@
                 <label for="shortCitation">Short Display Line</label>
                 <button type="button" class="metadata-copy-btn" onclick="copyFieldToClipboard('shortCitation', this)">Copy</button>
             </div>
-            <textarea id="shortCitation" placeholder="Book title and subtitle only"></textarea>
+            <textarea id="shortCitation" placeholder="Last Name, First Name. Title: Subtitle"></textarea>
         </div>
         <div class="input-hint">Only the bibliography entry is used in the generated HTML. The other lines are for copy/paste.</div>
         <div id="citationSuggestionNote" class="field-note"></div>
@@ -1802,7 +1802,10 @@
                 footnoteAuthors,
                 titleAndImprint
             ].filter(Boolean).join(', ') + '.';
-            const short = formatShortDisplayTitle(parts.titleText || '');
+            const shortTitle = formatShortDisplayTitle(parts.titleText || '');
+            const short = shortTitle
+                ? joinCitationSentences([parts.authorText, shortTitle])
+                : '';
 
             return {
                 footnote: cleanCitationText(footnote),
