@@ -324,7 +324,7 @@
                 <label for="shortCitation">Short Display Line</label>
                 <button type="button" class="metadata-copy-btn" onclick="copyFieldToClipboard('shortCitation', this)">Copy</button>
             </div>
-            <textarea id="shortCitation" placeholder="Auto-filled from the bibliography line"></textarea>
+            <textarea id="shortCitation" placeholder="Book title and subtitle only"></textarea>
         </div>
         <div class="input-hint">Only the bibliography entry is used in the generated HTML. The other lines are for copy/paste.</div>
         <div id="citationSuggestionNote" class="field-note"></div>
@@ -333,7 +333,7 @@
         <div class="restriction-panel">
             <h3>Access Restrictions</h3>
             <div class="checkbox-row">
-                <input type="checkbox" id="downloadCheckbox">
+                <input type="checkbox" id="downloadCheckbox" checked>
                 <label for="downloadCheckbox">Allow download</label>
             </div>
         </div>
@@ -1779,13 +1779,13 @@
 
         function buildCitationVariantsFromBibliography(bibliography) {
             if (bibliography === FALLBACK_CITATION) {
-                return { footnote: FALLBACK_CITATION, short: FALLBACK_CITATION };
+                return { footnote: FALLBACK_CITATION, short: '' };
             }
 
             const parts = parseBibliographyCitation(bibliography);
             if (!parts.titleText && !parts.authorText) {
                 const plainBibliography = normalizeAiCitationText(plainCitationText(bibliography));
-                return { footnote: plainBibliography, short: plainBibliography };
+                return { footnote: plainBibliography, short: '' };
             }
 
             const footnoteAuthors = bibliographyAuthorsToFootnote(parts.authorText);
@@ -1802,9 +1802,7 @@
                 footnoteAuthors,
                 titleAndImprint
             ].filter(Boolean).join(', ') + '.';
-            const shortAuthors = resolveShortDisplayCreators(parts.authorText, parts.titleText, footnotePublication.details);
-            const shortTitle = formatShortDisplayTitle(parts.titleText || '', footnotePublication.details);
-            const short = [shortAuthors, shortTitle].filter(Boolean).join('. ');
+            const short = formatShortDisplayTitle(parts.titleText || '');
 
             return {
                 footnote: cleanCitationText(footnote),
@@ -1812,14 +1810,10 @@
             };
         }
 
-        function formatShortDisplayTitle(title, details = '') {
-            const titleVolume = extractTrailingVolumeMarker(title);
-            const detailsVolume = findVolumeMarkerInDetails(details);
-            const volumeMarker = titleVolume.marker || detailsVolume;
-            const baseTitle = titleVolume.title || title;
-            const displayTitle = appendShortDisplayEditionPhrase(formatShortDisplayBilingualTitle(baseTitle), details);
-            const titleText = formatCitationTitle(displayTitle || '');
-            return [titleText, volumeMarker].filter(Boolean).join(', ');
+        function formatShortDisplayTitle(title) {
+            // An uncertain parse must not substitute the publisher for the title.
+            if (looksLikePublicationImprint(title)) return '';
+            return formatCitationTitle(formatShortDisplayBilingualTitle(title));
         }
 
         function formatShortDisplayBilingualTitle(title) {
@@ -2755,7 +2749,7 @@
             resetCopyButtons();
             document.getElementById('results').style.display = 'none';
             
-            downloadCheckbox.checked = false;
+            downloadCheckbox.checked = true;
             
             document.getElementById('dropboxLink').focus();
         }
